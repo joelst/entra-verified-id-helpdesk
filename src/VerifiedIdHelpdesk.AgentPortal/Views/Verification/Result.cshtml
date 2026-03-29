@@ -1,0 +1,21 @@
+@model ResultViewModel
+@{
+    ViewData["Title"] = "Identity Verified";
+}
+
+<div class="card">
+    <div class="card-title">Identity Verified</div>
+
+    <div class="result-verified">
+        <div class="result-name">✓ @Model.CallerName</div>
+        <div class="result-meta">
+            Employee ID: @(string.IsNullOrEmpty(Model.EmployeeId) ? "—" : Model.EmployeeId)<br />
+            Department: @(string.IsNullOrEmpty(Model.Department) ? "—" : Model.Department)<br />
+            Verified at: @Model.VerifiedAt.ToString("HH:mm:ss UTC") on @Model.VerifiedAt.ToString("yyyy-MM-dd")
+        </div>
+    </div>
+
+    <div style="margin-top: 24px;">
+        <a asp-action="Create" class="btn btn-primary">Start New Verification</a>
+    </div>
+</div>

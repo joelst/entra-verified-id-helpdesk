@@ -1,0 +1,133 @@
+@model PendingViewModel
+@{
+    ViewData["Title"] = "Waiting for Verification";
+}
+
+<div class="card">
+    <div class="card-title">Verification Pending</div>
+
+    <div class="alert alert-info">
+        Read this code to your caller, or confirm they received it via
+        <strong>@Model.DeliveryChannel</strong>.
+    </div>
+
+    <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
+
+    <div class="countdown" id="countdown"></div>
+
+    <div style="margin: 20px 0; color: var(--color-text-muted);">
+        <strong>Caller:</strong> @Model.CallerDisplayName<br />
+        @if (!string.IsNullOrEmpty(Model.TicketId))
+        {
+            <span><strong>Ticket:</strong> @Model.TicketId<br /></span>
+        }
+        <strong>Channel:</strong> @Model.DeliveryChannel
+    </div>
+
+    <div id="statusMessage" class="alert" style="display:none;"></div>
+
+    <div id="resultPanel" class="result-verified" style="display:none;">
+        <div class="result-name" id="resultName"></div>
+        <div class="result-meta" id="resultMeta"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- SignalR JS client — CUSTOMIZE: replace CDN ref with a locally-bundled copy for production -->
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@latest/dist/browser/signalr.min.js"></script>
+    <script>
+    const sessionId = '@Html.Raw(Model.SessionId)';
+    const apiBaseUrl = '@Html.Raw(Model.ApiBaseUrl)';
+    const expiresAt = new Date('@Html.Raw(Model.ExpiresAt.ToUniversalTime().ToString("o"))');
+    let pollingInterval;
+
+    // ── Countdown timer ──────────────────────────────────────────────────
+    function updateCountdown() {
+        const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        const el = document.getElementById('countdown');
+        el.textContent = remaining > 0
+            ? `Expires in ${mins}:${secs.toString().padStart(2, '0')}`
+            : 'Code expired';
+        if (remaining <= 60) el.classList.add('expiring-soon');
+        if (remaining === 0) clearInterval(countdownInterval);
+    }
+    const countdownInterval = setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    // ── SignalR connection ───────────────────────────────────────────────
+    try {
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(`${apiBaseUrl}@(VerifiedIdHelpdesk.Core.Constants.VerificationHubPath)`)
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on('VerificationComplete', (data) => {
+            clearInterval(pollingInterval);
+            showVerified(data);
+        });
+
+        connection.on('VerificationFailed', () => {
+            showStatus('error', 'Verification failed. Ask the caller to try again.');
+        });
+
+        connection.start().then(() => {
+            connection.invoke('JoinSession', sessionId);
+        }).catch(() => {
+            // Fall back to polling if SignalR connection fails
+            startPolling();
+        });
+    } catch (e) {
+        startPolling();
+    }
+
+    // ── Polling fallback ─────────────────────────────────────────────────
+    // CUSTOMIZE: Polling interval and max retries can be adjusted below.
+    function startPolling() {
+        if (pollingInterval) return;
+        pollingInterval = setInterval(pollStatus, 3000);
+    }
+
+    async function pollStatus() {
+        try {
+            const resp = await fetch(`${apiBaseUrl}/api/verification/status/${sessionId}`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.status === 'verified') {
+                clearInterval(pollingInterval);
+                let claims = {};
+                try { claims = JSON.parse(data.verifiedClaims || '{}'); } catch {}
+                showVerified({
+                    callerName: claims.displayName || 'Verified',
+                    employeeId: claims.employeeId || '',
+                    department: claims.department || '',
+                    verifiedAt: data.verifiedAt
+                });
+            } else if (data.status === 'failed' || data.status === 'expired') {
+                clearInterval(pollingInterval);
+                showStatus('error', `Session ${data.status}. Please generate a new code.`);
+            }
+        } catch (e) { /* silently ignore network errors */ }
+    }
+
+    function showVerified(data) {
+        document.getElementById('verificationCode').style.display = 'none';
+        document.getElementById('countdown').style.display = 'none';
+        document.getElementById('resultPanel').style.display = 'block';
+        document.getElementById('resultName').textContent = `✓ ${data.callerName}`;
+        document.getElementById('resultMeta').textContent =
+            `Employee ID: ${data.employeeId || '—'}  ·  Department: ${data.department || '—'}`;
+        setTimeout(() => {
+            window.location.href = `/Verification/Result/${sessionId}`;
+        }, 1500);
+    }
+
+    function showStatus(type, message) {
+        const el = document.getElementById('statusMessage');
+        el.className = `alert alert-${type === 'error' ? 'error' : 'info'}`;
+        el.textContent = message;
+        el.style.display = 'block';
+    }
+    </script>
+}

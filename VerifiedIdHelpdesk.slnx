@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VerifiedIdHelpdesk.AgentPortal/VerifiedIdHelpdesk.AgentPortal.csproj" />
+    <Project Path="src/VerifiedIdHelpdesk.Api/VerifiedIdHelpdesk.Api.csproj" />
+    <Project Path="src/VerifiedIdHelpdesk.Core/VerifiedIdHelpdesk.Core.csproj" />
+    <Project Path="src/VerifiedIdHelpdesk.Infrastructure/VerifiedIdHelpdesk.Infrastructure.csproj" />
+    <Project Path="src/VerifiedIdHelpdesk.Notifications/VerifiedIdHelpdesk.Notifications.csproj" />
+    <Project Path="src/VerifiedIdHelpdesk.VerifyPortal/VerifiedIdHelpdesk.VerifyPortal.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VerifiedIdHelpdesk.IntegrationTests/VerifiedIdHelpdesk.IntegrationTests.csproj" />
+    <Project Path="tests/VerifiedIdHelpdesk.UnitTests/VerifiedIdHelpdesk.UnitTests.csproj" />
+  </Folder>
+</Solution>

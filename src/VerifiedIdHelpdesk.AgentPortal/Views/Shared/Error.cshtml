@@ -1,0 +1,17 @@
+@model VerifiedIdHelpdesk.AgentPortal.Models.ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+}
+<div class="card">
+    <div class="card-title" style="color: var(--color-error);">An error occurred</div>
+    <div class="alert alert-error">
+        An unexpected error occurred. Please try again or contact your IT administrator.
+    </div>
+    @if (Model?.ShowRequestId == true)
+    {
+        <!-- SECURITY: Only show request ID (for log correlation), never show exception details -->
+        <p style="color: var(--color-text-muted); font-size: var(--font-size-sm);">
+            Request ID: <code>@Model.RequestId</code>
+        </p>
+    }
+</div>

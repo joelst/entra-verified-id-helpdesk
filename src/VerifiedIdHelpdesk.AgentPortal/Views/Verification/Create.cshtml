@@ -1,0 +1,140 @@
+@model CreateVerificationViewModel
+@{
+    ViewData["Title"] = "New Verification Request";
+}
+
+<div class="card">
+    <div class="card-title">New Verification Request</div>
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+
+        <!-- Hidden fields populated by directory search -->
+        <input type="hidden" asp-for="CallerEntraId" id="callerEntraId" />
+        <input type="hidden" asp-for="CallerEmail" id="callerEmail" />
+        <input type="hidden" asp-for="CallerDisplayName" id="callerDisplayName" />
+
+        <div class="form-group">
+            <label class="form-label">Caller Name or Email</label>
+            <input type="text" id="callerSearch" class="form-control"
+                   placeholder="Start typing a name or email address..." autocomplete="off" />
+            <div id="searchResults" class="search-results" style="display:none;"></div>
+            <div id="selectedCaller" class="alert alert-info" style="display:none;margin-top:8px;"></div>
+        </div>
+
+        <div class="form-group">
+            <label asp-for="TicketId" class="form-label">Ticket ID (optional)</label>
+            <input asp-for="TicketId" class="form-control" placeholder="e.g. INC-12345" />
+        </div>
+
+        <div class="form-group">
+            <label asp-for="Note" class="form-label">Note (optional, max 500 chars)</label>
+            <textarea asp-for="Note" class="form-control" rows="3" maxlength="500"
+                      placeholder="Reason for verification or additional context..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Delivery Channel</label>
+            <div class="channel-options">
+                <label class="channel-option">
+                    <input type="radio" asp-for="DeliveryChannel" value="email" checked />
+                    <span>📧 Email</span>
+                </label>
+                <label class="channel-option">
+                    <input type="radio" asp-for="DeliveryChannel" value="teams" />
+                    <span>💬 Microsoft Teams</span>
+                </label>
+                <label class="channel-option channel-disabled" title="SMS coming soon">
+                    <input type="radio" asp-for="DeliveryChannel" value="sms" disabled />
+                    <span>📱 SMS <small>(coming soon)</small></span>
+                </label>
+            </div>
+        </div>
+
+        @Html.ValidationSummary(false, null, new { @class = "alert alert-error" })
+
+        <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
+            Send Verification Request
+        </button>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+    // ── Directory search typeahead ────────────────────────────────────────
+    let searchTimeout;
+
+    document.getElementById('callerSearch').addEventListener('input', function () {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        if (query.length < 2) {
+            hideResults();
+            return;
+        }
+        searchTimeout = setTimeout(() => searchDirectory(query), 300);
+    });
+
+    async function searchDirectory(query) {
+        try {
+            const resp = await fetch(`/api/directory/search?q=${encodeURIComponent(query)}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (!resp.ok) return;
+            const results = await resp.json();
+            renderResults(results);
+        } catch (e) {
+            console.error('Directory search failed:', e);
+        }
+    }
+
+    function renderResults(results) {
+        const container = document.getElementById('searchResults');
+        if (!results || results.length === 0) {
+            hideResults();
+            return;
+        }
+        container.innerHTML = results.map(u => `
+            <div class="search-result-item"
+                 data-id="${esc(u.entraId)}"
+                 data-email="${esc(u.email)}"
+                 data-name="${esc(u.displayName)}">
+                <div class="search-result-name">${esc(u.displayName)}</div>
+                <div class="search-result-meta">${esc(u.email)} · ${esc(u.department || u.jobTitle || '')}</div>
+            </div>
+        `).join('');
+        container.style.display = 'block';
+
+        container.querySelectorAll('.search-result-item').forEach(item => {
+            item.addEventListener('click', () => selectCaller(
+                item.dataset.id, item.dataset.email, item.dataset.name));
+        });
+    }
+
+    function selectCaller(entraId, email, name) {
+        document.getElementById('callerEntraId').value = entraId;
+        document.getElementById('callerEmail').value = email;
+        document.getElementById('callerDisplayName').value = name;
+        document.getElementById('callerSearch').value = name;
+        hideResults();
+
+        const info = document.getElementById('selectedCaller');
+        info.textContent = `✓ Selected: ${name} (${email})`;
+        info.style.display = 'block';
+        document.getElementById('submitBtn').disabled = false;
+    }
+
+    function hideResults() {
+        document.getElementById('searchResults').style.display = 'none';
+    }
+
+    function esc(str) {
+        if (!str) return '';
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#callerSearch') && !e.target.closest('#searchResults'))
+            hideResults();
+    });
+    </script>
+}
