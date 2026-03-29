@@ -12,10 +12,13 @@ using CoreConstants = VerifiedIdHelpdesk.Core.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Key Vault — must be first so downstream config reads secrets
-builder.Configuration.AddAzureKeyVault(
-    new Uri(builder.Configuration["KeyVault:Uri"]!),
-    new DefaultAzureCredential());
+// Key Vault — must be first so downstream config reads secrets.
+// Skipped in the Testing environment (integration tests) and when URI is not configured.
+var keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (!builder.Environment.IsEnvironment("Testing") && !string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+}
 
 // Authentication — validate bearer tokens issued by Entra
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -56,7 +59,12 @@ builder.Services.AddSingleton<ISessionStore, AzureTableSessionStore>();
 builder.Services.AddSingleton<IVerifiedIdClient, EntraVerifiedIdClient>();
 builder.Services.AddSingleton<INotificationService, GraphNotificationService>();
 builder.Services.AddHostedService<SessionExpiryService>();
-builder.Services.AddApplicationInsightsTelemetry();
+
+// Application Insights — skipped in Testing environment (no connection string available).
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddApplicationInsightsTelemetry();
+}
 
 builder.Services.AddControllers();
 
@@ -69,3 +77,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<VerificationHub>(CoreConstants.VerificationHubPath);
 app.Run();
+
+// Expose Program class for WebApplicationFactory in integration tests
+public partial class Program { }

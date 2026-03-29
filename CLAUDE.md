@@ -31,10 +31,10 @@ VerifiedIdHelpdesk.sln
 
 ## Tech Stack
 
-- **.NET 8** — all projects target net8.0
-- **ASP.NET Core 8 MVC** — Agent Portal
-- **ASP.NET Core 8 Razor Pages** — IDVerify site (public, no auth)
-- **ASP.NET Core 8 Web API** — Backend API
+- **.NET 10** — all projects target net10.0
+- **ASP.NET Core 10 MVC** — Agent Portal
+- **ASP.NET Core 10 Razor Pages** — IDVerify site (public, no auth)
+- **ASP.NET Core 10 Web API** — Backend API
 - **Microsoft.Identity.Web** — Entra ID OIDC authentication
 - **Microsoft.Graph** — directory search, email, Teams notifications
 - **Azure.Data.Tables** — session store
