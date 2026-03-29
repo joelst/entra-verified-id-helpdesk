@@ -28,3 +28,8 @@ appsettings.*.json
 
 # Logs
 *.log
+
+# Prevent Office docs from being committed
+*.docx
+*.pptx
+*.xlsx
