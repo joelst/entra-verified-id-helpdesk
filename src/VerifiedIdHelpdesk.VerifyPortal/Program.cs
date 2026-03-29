@@ -1,26 +1,45 @@
+using Azure.Identity;
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+var keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+
 builder.Services.AddRazorPages();
+
+builder.Services.AddHttpClient("ApiClient", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Api:BaseUrl"]!);
+});
+
+builder.Services.AddApplicationInsightsTelemetry();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
+// Security headers — applied before any response is written
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin");
+    context.Response.Headers.Append("Content-Security-Policy",
+        "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
+        "style-src 'self'; img-src 'self' data:;");
+    await next();
+});
+
 app.UseHttpsRedirection();
-
 app.UseRouting();
-
 app.UseAuthorization();
-
 app.MapStaticAssets();
-app.MapRazorPages()
-   .WithStaticAssets();
+app.MapRazorPages();
 
 app.Run();

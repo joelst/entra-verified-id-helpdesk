@@ -1,10 +1,38 @@
-﻿@page
+@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Verify Your Identity";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="card">
+    <div class="card-title">Verify Your Identity</div>
+
+    <p>Your helpdesk agent has sent you a verification code. Enter your work email and the code below.</p>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-error">@Model.ErrorMessage</div>
+    }
+
+    <form method="post">
+        <div class="form-group">
+            <label class="form-label" for="email">Work Email Address</label>
+            <input type="email" id="email" name="email" class="form-control"
+                   placeholder="you@yourcompany.com" required autocomplete="email"
+                   value="@Model.Email" />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="code">Verification Code</label>
+            <input type="text" id="code" name="code" class="form-control"
+                   placeholder="XXXX-XXXX" required maxlength="9"
+                   autocomplete="off" inputmode="text"
+                   style="font-family: monospace; font-size: 1.3em; letter-spacing: 0.1em;" />
+            <small style="color: var(--color-text-muted); margin-top: 4px; display: block;">
+                Enter the 8-character code provided by your helpdesk agent.
+            </small>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Verify Identity</button>
+    </form>
 </div>

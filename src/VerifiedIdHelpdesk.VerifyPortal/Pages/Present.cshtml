@@ -1,0 +1,75 @@
+@page
+@model PresentModel
+@{
+    ViewData["Title"] = "Present Your Credential";
+}
+
+<div class="card">
+    <div class="card-title">Present Your Credential</div>
+
+    <div class="alert alert-info">
+        Open <strong>Microsoft Authenticator</strong> on your phone and scan the QR code below,
+        or tap the button to open Authenticator directly.
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.QrCodeUri))
+    {
+        <div style="text-align:center; margin: 24px 0;">
+            <img src="@Model.QrCodeUri" alt="Verification QR Code"
+                 style="max-width:220px; border: 2px solid var(--color-border); border-radius: var(--radius); padding: 8px;" />
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Model.DeepLink))
+    {
+        <div style="text-align:center; margin-bottom: 20px;">
+            <a href="@Model.DeepLink" class="btn btn-accent">
+                Open Microsoft Authenticator
+            </a>
+        </div>
+    }
+
+    <div class="countdown" id="countdown"></div>
+
+    <div id="statusMsg" style="display:none; margin-top:16px;"></div>
+</div>
+
+@section Scripts {
+<script>
+    const sessionId = '@Html.Raw(Model.SessionId)';
+    const apiBase = '@Html.Raw(Model.ApiBaseUrl)';
+    const expiresAt = new Date('@Html.Raw(Model.ExpiresAt.ToUniversalTime().ToString("O"))');
+
+    function updateCountdown() {
+        const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        const el = document.getElementById('countdown');
+        el.textContent = remaining > 0
+            ? `This request expires in ${mins}:${secs.toString().padStart(2, '0')}`
+            : 'This request has expired. Please start over.';
+        if (remaining <= 60) el.classList.add('expiring-soon');
+        if (remaining <= 0) { clearInterval(countdownTimer); clearInterval(pollTimer); }
+    }
+    const countdownTimer = setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    const pollTimer = setInterval(async () => {
+        try {
+            const resp = await fetch(`${apiBase}/api/verification/public-status/${sessionId}`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.status === 'verified') {
+                clearInterval(pollTimer);
+                window.location.href = '/Complete';
+            } else if (data.status === 'failed' || data.status === 'expired') {
+                clearInterval(pollTimer);
+                document.getElementById('statusMsg').className = 'alert alert-error';
+                document.getElementById('statusMsg').textContent =
+                    'This request has expired or failed. Please contact your helpdesk agent.';
+                document.getElementById('statusMsg').style.display = 'block';
+            }
+        } catch (e) { /* ignore transient errors */ }
+    }, 3000);
+</script>
+}
