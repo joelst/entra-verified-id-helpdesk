@@ -1,0 +1,283 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "basics": [
+      {
+        "name": "suffix",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Resource name suffix",
+        "toolTip": "Short unique suffix appended to every resource name (e.g. 'helpdesk-prod'). Keep it 3–16 characters — Key Vault names are capped at 24 characters total.",
+        "placeholder": "helpdesk-prod",
+        "defaultValue": "helpdesk-dev",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z0-9][a-z0-9-]{1,14}[a-z0-9]$",
+          "validationMessage": "3–16 characters: lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen."
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "infrastructure",
+        "label": "Infrastructure",
+        "subLabel": {
+          "preValidation": "Configure resource tiers",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Infrastructure",
+        "elements": [
+          {
+            "name": "skuInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "S1 (Standard) is the recommended default — no special quota required and ~40% cheaper than P1v3. Use P1v3 or P2v3 for production workloads requiring deployment slots or higher compute. B2 (Basic tier) requires Basic VM quota which many Azure subscriptions do not include."
+            }
+          },
+          {
+            "name": "skuName",
+            "type": "Microsoft.Common.DropDown",
+            "label": "App Service plan SKU",
+            "defaultValue": "S1 — Standard (recommended)",
+            "toolTip": "Controls compute size for all three App Service apps. All apps share a single plan.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                { "label": "S1 — Standard (recommended for dev/test, ~$73/mo)", "value": "S1" },
+                { "label": "S2 — Standard medium (~$146/mo)", "value": "S2" },
+                { "label": "S3 — Standard large (~$292/mo)", "value": "S3" },
+                { "label": "P0v3 — Premium V3 small (cheapest Premium, ~$61/mo)", "value": "P0v3" },
+                { "label": "P1v3 — Premium V3 (production, ~$123/mo)", "value": "P1v3" },
+                { "label": "P2v3 — Premium V3 large (high-traffic, ~$246/mo)", "value": "P2v3" },
+                { "label": "B2 — Basic (requires Basic VM quota, ~$75/mo)", "value": "B2" }
+              ]
+            }
+          },
+          {
+            "name": "storageRedundancy",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Storage account redundancy",
+            "defaultValue": "LRS — Locally redundant (dev/test)",
+            "toolTip": "Determines how session data in Azure Table Storage is replicated. ZRS survives a zone failure; GRS survives a full region outage.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                { "label": "LRS — Locally redundant (dev/test)", "value": "Standard_LRS" },
+                { "label": "ZRS — Zone redundant (recommended for production)", "value": "Standard_ZRS" },
+                { "label": "GRS — Geo redundant (highest resilience)", "value": "Standard_GRS" }
+              ]
+            }
+          },
+          {
+            "name": "storageAccountName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Storage account name (optional)",
+            "toolTip": "Leave blank to auto-generate from the suffix. If the auto-generated name is already taken, enter a unique name here. Must be 3–24 lowercase letters and digits only — no hyphens.",
+            "placeholder": "stmyhelpdesk",
+            "defaultValue": "",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9]{3,24}$",
+              "validationMessage": "Leave blank for auto-generated name, or enter 3–24 lowercase letters and digits only (no hyphens)."
+            }
+          },
+          {
+            "name": "corporateIpRange",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Corporate IP range (CIDR) — Agent Portal access restriction",
+            "toolTip": "CIDR block allowed to reach the Agent Portal. Use your organisation's egress IP range to prevent public access. Leave as 0.0.0.0/0 to allow all IPs (not recommended for production).",
+            "placeholder": "203.0.113.0/24",
+            "defaultValue": "0.0.0.0/0",
+            "constraints": {
+              "required": false
+            }
+          }
+        ]
+      },
+      {
+        "name": "entraId",
+        "label": "Entra App Registration",
+        "subLabel": {
+          "preValidation": "Provide app registration details",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Entra App Registration",
+        "elements": [
+          {
+            "name": "entraInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "Run scripts/New-AppRegistration.ps1 before deploying — it creates the app registration and certificate and prints the client ID to copy below. Click the link to open your app registrations in a new tab.",
+              "uri": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
+            }
+          },
+          {
+            "name": "tenantId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Entra tenant ID (Directory ID)",
+            "toolTip": "Your Microsoft Entra Directory (tenant) ID — auto-filled from the selected subscription. Only change this if you are deploying to a different tenant.",
+            "defaultValue": "[subscription().tenantId]",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Must be a valid GUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)."
+            }
+          },
+          {
+            "name": "clientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "App registration client ID (Application ID)",
+            "toolTip": "Application (client) ID printed by New-AppRegistration.ps1. You can leave this blank and update the app setting after deployment. To find it manually: open Entra admin center → App registrations → your app → Overview → copy 'Application (client) ID'.",
+            "placeholder": "Leave blank to fill in after deployment",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Must be a valid GUID or left blank."
+            }
+          },
+          {
+            "name": "clientIdLink",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "None",
+              "text": "Open App registrations in Entra admin center →",
+              "uri": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
+            }
+          },
+          {
+            "name": "helpDeskGroupId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Helpdesk agents group object ID",
+            "toolTip": "Object ID of the Entra security group whose members are helpdesk agents. You can leave this blank and update the app setting after deployment. To find it: open Entra admin center → Groups → your group → Overview → copy 'Object ID'.",
+            "placeholder": "Leave blank to fill in after deployment",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Must be a valid GUID or left blank."
+            }
+          },
+          {
+            "name": "groupIdLink",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "None",
+              "text": "Open Groups in Entra admin center →",
+              "uri": "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/AllGroups"
+            }
+          },
+          {
+            "name": "certName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Certificate name in Key Vault",
+            "toolTip": "Name of the certificate created by New-AppRegistration.ps1. Change this only if you used a custom -CertName when running the script.",
+            "defaultValue": "EntraClientCert",
+            "constraints": {
+              "required": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "verifiedId",
+        "label": "Verified ID",
+        "subLabel": {
+          "preValidation": "Configure your Entra Verified ID tenant",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Verified ID",
+        "elements": [
+          {
+            "name": "vidInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "These values come from your Entra Verified ID tenant configuration in the Entra admin center under Verified ID → Organization settings."
+            }
+          },
+          {
+            "name": "credentialType",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Credential type",
+            "toolTip": "Verifiable credential type name as configured in your Entra Verified ID tenant (e.g. 'EmployeeVerifiedCredential').",
+            "defaultValue": "EmployeeVerifiedCredential",
+            "constraints": {
+              "required": true
+            }
+          },
+          {
+            "name": "didAuthority",
+            "type": "Microsoft.Common.TextBox",
+            "label": "DID authority",
+            "toolTip": "Decentralized identifier (DID) for your Verified ID tenant. Found in Entra admin center → Verified ID → Organization settings → Tenant DID.",
+            "placeholder": "did:web:yourdomain.com",
+            "constraints": {
+              "required": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "notifications",
+        "label": "Notifications",
+        "subLabel": {
+          "preValidation": "Configure the notification sender",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Notifications",
+        "elements": [
+          {
+            "name": "notifInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "The app uses Microsoft Graph to send email and Teams notifications on behalf of this user. The user must have a valid Exchange Online mailbox. The app registration needs Mail.Send and Chat.ReadWrite.All permissions."
+            }
+          },
+          {
+            "name": "senderEmail",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Sender email address (UPN)",
+            "toolTip": "User Principal Name (email address) of the mailbox account used to send verification notifications.",
+            "placeholder": "helpdesk@yourdomain.com",
+            "constraints": {
+              "required": true,
+              "regex": "^[^@]+@[^@]+\\.[^@]+$",
+              "validationMessage": "Must be a valid email address."
+            }
+          },
+          {
+            "name": "senderUserId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Sender user object ID",
+            "toolTip": "Entra object ID of the sender user account. Found in Entra admin center → Users → the user → Overview.",
+            "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Must be a valid GUID."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "suffix":             "[basics('suffix')]",
+      "location":           "[location()]",
+      "tenantId":           "[steps('entraId').tenantId]",
+      "clientId":           "[steps('entraId').clientId]",
+      "helpDeskGroupId":    "[steps('entraId').helpDeskGroupId]",
+      "certName":           "[steps('entraId').certName]",
+      "corporateIpRange":   "[steps('infrastructure').corporateIpRange]",
+      "credentialType":     "[steps('verifiedId').credentialType]",
+      "didAuthority":       "[steps('verifiedId').didAuthority]",
+      "senderEmail":        "[steps('notifications').senderEmail]",
+      "senderUserId":       "[steps('notifications').senderUserId]",
+      "skuName":            "[steps('infrastructure').skuName]",
+      "storageRedundancy":  "[steps('infrastructure').storageRedundancy]",
+      "storageAccountName": "[steps('infrastructure').storageAccountName]"
+    }
+  }
+}

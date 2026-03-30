@@ -23,11 +23,11 @@ param location string = resourceGroup().location
 @description('Microsoft Entra tenant ID.')
 param tenantId string
 
-@description('App registration client ID (used by all three apps).')
-param clientId string
+@description('App registration client ID (used by all three apps). Can be left empty and updated later via "az webapp config appsettings set".')
+param clientId string = ''
 
-@description('Object ID of the Entra security group whose members are helpdesk agents.')
-param helpDeskGroupId string
+@description('Object ID of the Entra security group whose members are helpdesk agents. Can be left empty and updated later.')
+param helpDeskGroupId string = ''
 
 // CUSTOMIZE: Set to your corporate CIDR range to restrict Agent Portal access.
 // The default '0.0.0.0/0' leaves the portal open — update this before production.
@@ -46,6 +46,27 @@ param senderEmail string
 @description('Entra object ID of the sender user account.')
 param senderUserId string
 
+@description('App Service plan SKU. S1 (Standard) is the recommended default — no special quota required and ~40% cheaper than P1v3. B2 (Basic tier) requires Basic VM quota which many subscriptions do not have.')
+@allowed(['S1', 'S2', 'S3', 'P0v3', 'P1v3', 'P2v3', 'B2'])
+param skuName string = 'S1'
+
+@description('Storage account redundancy. LRS for dev/test; ZRS or GRS for production.')
+@allowed(['Standard_LRS', 'Standard_ZRS', 'Standard_GRS'])
+param storageRedundancy string = 'Standard_LRS'
+
+@description('Name of the Entra app registration certificate in Key Vault. Must match the -CertName used in New-AppRegistration.ps1.')
+param certName string = 'EntraClientCert'
+
+@description('Custom storage account name.Leave empty to auto-generate from the suffix (e.g. suffix "helpdesk-dev" → "sthelpdesdev"). Storage account names must be globally unique, 3–24 lowercase letters and digits only — no hyphens.')
+@maxLength(24)
+param storageAccountName string = ''
+
+@description('GitHub repository URL to deploy application code from. Defaults to the canonical repo. Change this if you have forked the repository.')
+param repoUrl string = 'https://github.com/joelst/entra-verified-id-helpdesk'
+
+@description('Git branch to deploy from.')
+param repoBranch string = 'main'
+
 // ── Naming variables ──────────────────────────────────────────────────────────
 //
 // CUSTOMIZE: Adjust these naming conventions to match your organisation's standards.
@@ -55,7 +76,7 @@ var planName    = 'asp-${suffix}'
 var apiName     = 'app-api-${suffix}'
 var agentsName  = 'app-agents-${suffix}'
 var verifyName  = 'app-verify-${suffix}'
-var storageName = 'st${replace(suffix, '-', '')}' // no hyphens; must be lowercase
+var storageName = empty(storageAccountName) ? 'st${replace(suffix, '-', '')}' : storageAccountName // no hyphens; must be lowercase
 var kvName      = 'kv-${suffix}'                    // max 24 chars total
 var appiName    = 'appi-${suffix}'
 var logName     = 'log-${suffix}'
@@ -70,6 +91,9 @@ var tags = {
   Application: 'VerifiedIdHelpdesk'
   ManagedBy: 'Bicep'
 }
+
+// Derive App Service plan tier from SKU name
+var skuTier = startsWith(skuName, 'P') ? 'PremiumV3' : startsWith(skuName, 'S') ? 'Standard' : 'Basic'
 
 // ── Log Analytics Workspace ────────────────────────────────────────────────────
 
@@ -108,7 +132,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Standard_LRS' // CUSTOMIZE: Use ZRS or GRS for production resilience
+    name: storageRedundancy // CUSTOMIZE: Standard_ZRS or Standard_GRS for production resilience
   }
   kind: 'StorageV2'
   properties: {
@@ -120,9 +144,9 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 
 // ── Key Vault ──────────────────────────────────────────────────────────────────
 // RBAC auth model (not access policies). Soft delete retained for 90 days.
-// After deployment, set the two secrets manually:
-//   EntraClientSecret — app registration client secret
-//   HmacKey           — 32-byte base64 key for HMAC-SHA256 code hashing
+// After deployment, run New-AppRegistration.ps1 to create the certificate in Key Vault,
+// then set the HmacKey secret manually:
+//   HmacKey — 32-byte base64 key for HMAC-SHA256 one-time code hashing
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: kvName
@@ -141,16 +165,18 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// ── App Service Plan (Linux, B2) ───────────────────────────────────────────────
-// CUSTOMIZE: Change SKU to P1v3/PremiumV3 for production (auto-scale, custom domains, slots).
+// ── App Service Plan ───────────────────────────────────────────────────────────
+// CUSTOMIZE: Change SKU to P2v3 for high-traffic production (auto-scale, custom domains, slots).
+// B2 (Basic tier) requires Basic VM quota — many subscriptions have none. Use P1v3 unless you
+// have confirmed Basic VM quota in your subscription.
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: planName
   location: location
   tags: tags
   sku: {
-    name: 'B2'   // CUSTOMIZE: 'P1v3' for production
-    tier: 'Basic' // CUSTOMIZE: 'PremiumV3' for production
+    name: skuName  // S1 default (Standard tier); P1v3/P2v3 for production; B2 requires Basic VM quota
+    tier: skuTier
   }
   kind: 'linux'
   properties: {
@@ -194,6 +220,13 @@ resource apiApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'VerifyPortal__BaseUrl',                 value: verifyBaseUrl }
         { name: 'Notifications__SenderEmail',            value: senderEmail }
         { name: 'Notifications__SenderUserId',           value: senderUserId }
+        // Certificate-based auth: M.I.W. reads the full PFX via the KV Secrets endpoint
+        { name: 'AzureAd__ClientCertificates__0__SourceType',              value: 'KeyVault' }
+        { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl',             value: keyVault.properties.vaultUri }
+        { name: 'AzureAd__ClientCertificates__0__KeyVaultCertificateName', value: certName }
+        // Oryx build: tell the build system which project to compile in this monorepo
+        { name: 'PROJECT',                               value: 'src/VerifiedIdHelpdesk.Api/VerifiedIdHelpdesk.Api.csproj' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT',        value: 'true' }
       ]
     }
   }
@@ -226,6 +259,13 @@ resource agentsApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'AzureAd__ClientId',                     value: clientId }
         { name: 'AuthorizationGroups__HelpDeskAgents',   value: helpDeskGroupId }
         { name: 'Api__BaseUrl',                          value: apiBaseUrl }
+        // Certificate-based auth
+        { name: 'AzureAd__ClientCertificates__0__SourceType',              value: 'KeyVault' }
+        { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl',             value: keyVault.properties.vaultUri }
+        { name: 'AzureAd__ClientCertificates__0__KeyVaultCertificateName', value: certName }
+        // Oryx build
+        { name: 'PROJECT',                               value: 'src/VerifiedIdHelpdesk.AgentPortal/VerifiedIdHelpdesk.AgentPortal.csproj' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT',        value: 'true' }
       ]
       // IP restriction: allow only the corporate IP range.
       // When corporateIpRange is the default '0.0.0.0/0' no restriction is applied.
@@ -265,10 +305,64 @@ resource verifyApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'KeyVault__Uri',                         value: keyVault.properties.vaultUri }
         { name: 'Api__BaseUrl',                          value: apiBaseUrl }
+        // Oryx build
+        { name: 'PROJECT',                               value: 'src/VerifiedIdHelpdesk.VerifyPortal/VerifiedIdHelpdesk.VerifyPortal.csproj' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT',        value: 'true' }
       ]
     }
   }
 }
+
+
+// ── Source Control / Oryx Build ───────────────────────────────────────────────
+//
+// Each App Service pulls from the GitHub repository and builds with Oryx when
+// the Bicep deployment runs. Because these are child resources of the site, the
+// app settings (including PROJECT and SCM_DO_BUILD_DURING_DEPLOYMENT) are always
+// applied before the build is triggered — no race condition.
+//
+// isManualIntegration: true = no webhook; deploy is triggered by ARM/Bicep.
+// To re-deploy without re-provisioning infrastructure, use the "Sync" button in
+// App Service → Deployment Center, or re-run `az deployment group create`.
+//
+// The PROJECT app setting on each site tells Oryx which .csproj to build.
+
+resource apiSourceControl 'Microsoft.Web/sites/sourcecontrols@2024-04-01' = {
+  parent: apiApp
+  name: 'web'
+  properties: {
+    repoUrl: repoUrl
+    branch: repoBranch
+    isManualIntegration: true
+    deploymentRollbackEnabled: false
+    isMercurial: false
+  }
+}
+
+resource agentsSourceControl 'Microsoft.Web/sites/sourcecontrols@2024-04-01' = {
+  parent: agentsApp
+  name: 'web'
+  properties: {
+    repoUrl: repoUrl
+    branch: repoBranch
+    isManualIntegration: true
+    deploymentRollbackEnabled: false
+    isMercurial: false
+  }
+}
+
+resource verifySourceControl 'Microsoft.Web/sites/sourcecontrols@2024-04-01' = {
+  parent: verifyApp
+  name: 'web'
+  properties: {
+    repoUrl: repoUrl
+    branch: repoBranch
+    isManualIntegration: true
+    deploymentRollbackEnabled: false
+    isMercurial: false
+  }
+}
+
 
 // ── RBAC Role Assignments ──────────────────────────────────────────────────────
 //
