@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <!-- Placeholder logo — replace with your organization's logo -->
+  <path d="M20 3 L36 10 L36 22 C36 30 28 36 20 38 C12 36 4 30 4 22 L4 10 Z"
+        fill="#0078d4" opacity="0.9"/>
+  <path d="M17 21 L14 18 L12.5 19.5 L17 24 L27 14 L25.5 12.5 Z"
+        fill="white"/>
+</svg>
