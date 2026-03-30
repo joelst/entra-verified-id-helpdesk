@@ -75,6 +75,9 @@ public static class Constants
     /// <summary>Delivery channel identifier for Microsoft Teams.</summary>
     public const string ChannelTeams = "teams";
 
+    /// <summary>Delivery channel identifier for verbal (agent reads code to caller).</summary>
+    public const string ChannelVerbal = "verbal";
+
     /// <summary>Delivery channel identifier for SMS (not yet implemented).</summary>
     public const string ChannelSms = "sms";
 }

@@ -81,7 +81,12 @@ public class VerificationController : ControllerBase
         await _sessions.CreateAsync(session);
 
         var displayCode = CodeGenerator.FormatForDisplay(code);
-        await _notifications.SendCodeAsync(request.CallerEmail, displayCode, session.ExpiresAt, session.DeliveryChannel);
+
+        // Skip sending notification for verbal delivery — agent reads the code to the caller directly
+        if (session.DeliveryChannel != Constants.ChannelVerbal)
+        {
+            await _notifications.SendCodeAsync(request.CallerEmail, displayCode, session.ExpiresAt, session.DeliveryChannel);
+        }
 
         _logger.LogInformation("code_generated {@Event}", new
         {
