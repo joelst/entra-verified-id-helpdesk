@@ -80,7 +80,7 @@ param(
 
     # Path where the certificate PEM (cert + private key) is saved for local development.
     # Set to '' or use -SkipLocalDevCert to skip the export.
-    [string] $LocalDevCertPath   = "$HOME/.entra-vidhelp/$CertName.pem",
+    [string] $LocalDevCertPath   = "$HOME/.entra-vidhelp/$CertName.pfx",
 
     # Skip automatic Key Vault role assignment (use if you have already assigned the role
     # or prefer to assign it yourself before running the script)

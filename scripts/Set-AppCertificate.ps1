@@ -7,7 +7,7 @@
       - Assigns Key Vault Certificates Officer role to the caller (unless -SkipRoleAssignment)
       - Creates a self-signed certificate in Key Vault
       - Registers the certificate (public key only) with the app registration
-      - Optionally exports the certificate PEM for local development
+      - Optionally exports the certificate PFX for local development
 
     Run this after:
       1. New-AppRegistration.ps1 -SkipCert  (creates the app reg, outputs clientId)
@@ -40,11 +40,11 @@
     assigned the role or prefer to assign it yourself.
 
 .PARAMETER SkipLocalDevCert
-    Skip exporting the certificate PEM for local development.
+    Skip exporting the certificate PFX for local development.
 
 .PARAMETER LocalDevCertPath
-    Path where the certificate PEM (cert + private key) is saved for local development.
-    Default: "$HOME/.entra-vidhelp/<CertName>.pem"
+    Path where the certificate PFX is saved for local development.
+    Default: "$HOME/.entra-vidhelp/<CertName>.pfx"
 
 .EXAMPLE
     # After running New-AppRegistration.ps1 -SkipCert and deploying infrastructure:
@@ -66,7 +66,7 @@ param(
     [int]    $CertValidityMonths = 24,
     [string] $DisplayName        = 'VerifiedID Helpdesk',
 
-    [string] $LocalDevCertPath   = "$HOME/.entra-vidhelp/$CertName.pem",
+    [string] $LocalDevCertPath   = "$HOME/.entra-vidhelp/$CertName.pfx",
 
     [switch] $SkipRoleAssignment,
     [switch] $SkipLocalDevCert
@@ -169,7 +169,7 @@ $certPolicy = @{
         keySize    = 2048
         reuseKey   = $false
     }
-    secretProperties = @{ contentType = 'application/x-pem-file' }
+    secretProperties = @{ contentType = 'application/x-pkcs12' }
     x509CertificateProperties = @{
         subject          = "CN=$DisplayName"
         validityInMonths = $CertValidityMonths
@@ -214,30 +214,33 @@ if ($LASTEXITCODE -ne 0) {
 Write-Information "  Certificate registered with app registration."
 
 # ---------------------------------------------------------------------------
-# Export certificate PEM for local development
+# Export certificate PFX for local development
 # ---------------------------------------------------------------------------
 
 if (-not $SkipLocalDevCert -and $LocalDevCertPath) {
-    Write-Step "Exporting certificate PEM for local development"
+    # Adjust extension: PKCS#12 certs export as .pfx, not .pem
+    $LocalDevCertPath = [System.IO.Path]::ChangeExtension($LocalDevCertPath, '.pfx')
+
+    Write-Step "Exporting certificate PFX for local development"
 
     $certDir = Split-Path $LocalDevCertPath -Parent
     if ($certDir -and -not (Test-Path $certDir)) {
         New-Item -ItemType Directory -Path $certDir -Force | Out-Null
     }
 
-    # The KV Secrets endpoint returns the full PEM (cert + private key) for exportable certs.
-    $pemContent = az keyvault secret show `
+    # The KV Secrets endpoint returns the full PKCS#12 (base64) for exportable certs.
+    $pfxBase64 = az keyvault secret show `
         --vault-name $KeyVaultName `
         --name $CertName `
         --query value -o tsv 2>$null
 
-    if ($LASTEXITCODE -ne 0 -or -not $pemContent) {
-        Write-Warning "Could not download certificate PEM from Key Vault. Export it manually with:"
-        Write-Warning "  az keyvault secret show --vault-name $KeyVaultName --name $CertName --query value -o tsv > '$LocalDevCertPath'"
+    if ($LASTEXITCODE -ne 0 -or -not $pfxBase64) {
+        Write-Warning "Could not download certificate from Key Vault. Export it manually with:"
+        Write-Warning "  az keyvault secret show --vault-name $KeyVaultName --name $CertName --query value -o tsv"
     }
     else {
-        $pemContent | Set-Content $LocalDevCertPath -Encoding UTF8
-        Write-Information "  Certificate PEM saved to: $LocalDevCertPath"
+        [System.IO.File]::WriteAllBytes($LocalDevCertPath, [System.Convert]::FromBase64String($pfxBase64))
+        Write-Information "  Certificate PFX saved to: $LocalDevCertPath"
         Write-Warning "  IMPORTANT: This file contains the private key. Keep it secure and do not commit it to source control."
 
         $localDevProjects = @(
