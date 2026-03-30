@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "17046736714708810630"
+      "templateHash": "9304531936994030360"
     }
   },
   "parameters": {
@@ -150,6 +150,7 @@
     },
     "skuTier": "[if(startsWith(parameters('skuName'), 'P'), 'PremiumV3', if(startsWith(parameters('skuName'), 'S'), 'Standard', 'Basic'))]",
     "kvSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6",
+    "kvCertificateUserRoleId": "db79e9a7-68ee-4b58-9aeb-b90e7c24fcba",
     "storageTableContributorRoleId": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3"
   },
   "resources": [
@@ -563,6 +564,36 @@
       "dependsOn": [
         "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
         "[resourceId('Microsoft.Web/sites', variables('verifyName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), resourceId('Microsoft.Web/sites', variables('apiName')), variables('kvCertificateUserRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvCertificateUserRoleId'))]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('apiName')), '2024-04-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('apiName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), resourceId('Microsoft.Web/sites', variables('agentsName')), variables('kvCertificateUserRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvCertificateUserRoleId'))]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('agentsName')), '2024-04-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('agentsName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]"
       ]
     },
     {

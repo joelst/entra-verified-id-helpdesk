@@ -367,12 +367,15 @@ resource verifySourceControl 'Microsoft.Web/sites/sourcecontrols@2024-04-01' = {
 // ── RBAC Role Assignments ──────────────────────────────────────────────────────
 //
 // Key Vault Secrets User (4633458b-…) — read-only access to Key Vault secrets.
+// Key Vault Certificate User (db79e9a7-…) — read certificates (needed by MIWA's
+//   KeyVaultCertificateLoader which calls CertificateClient.GetCertificateAsync).
 // Storage Table Data Contributor (0a9a7e1f-…) — read/write Table Storage entities.
 //
-// Only the API needs Storage access. All three apps need Key Vault access to load
-// the HMAC key and (for AgentPortal/API) the Entra client secret.
+// Only the API needs Storage access. All three apps need Key Vault secrets access.
+// AgentPortal and API also need certificate read access to load the Entra client cert.
 
-var kvSecretsUserRoleId          = '4633458b-17de-408a-b874-0445c86b69e6'
+var kvSecretsUserRoleId           = '4633458b-17de-408a-b874-0445c86b69e6'
+var kvCertificateUserRoleId       = 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba'
 var storageTableContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 
 resource apiKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -401,6 +404,27 @@ resource verifyKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: verifyApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Certificate User — AgentPortal and API load the Entra client certificate from Key Vault
+resource apiKvCertRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, apiApp.id, kvCertificateUserRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvCertificateUserRoleId)
+    principalId: apiApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource agentsKvCertRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, agentsApp.id, kvCertificateUserRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvCertificateUserRoleId)
+    principalId: agentsApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
