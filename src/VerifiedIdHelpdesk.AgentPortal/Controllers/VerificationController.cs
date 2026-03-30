@@ -133,7 +133,10 @@ public class VerificationController : Controller
             {
                 claims = JsonSerializer.Deserialize<Dictionary<string, string>>(status.VerifiedClaims, JsonOptions);
             }
-            catch { /* Ignore deserialization errors */ }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Failed to deserialize verified claims for session {SessionId}", sessionId);
+            }
         }
 
         var vm = new ResultViewModel

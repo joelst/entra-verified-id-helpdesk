@@ -25,11 +25,14 @@ public class DirectoryController : ControllerBase
         if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
             return Ok(Array.Empty<object>());
 
+        // SECURITY: Sanitize search input — strip double quotes to prevent Graph search syntax injection.
+        var sanitizedQuery = q.Replace("\"", "");
+
         try
         {
             var users = await _graph.Users.GetAsync(req =>
             {
-                req.QueryParameters.Search = $"\"displayName:{q}\" OR \"mail:{q}\"";
+                req.QueryParameters.Search = $"\"displayName:{sanitizedQuery}\" OR \"mail:{sanitizedQuery}\"";
                 req.QueryParameters.Select = ["id", "displayName", "mail", "department", "jobTitle"];
                 req.QueryParameters.Top = 10;
                 req.QueryParameters.Orderby = ["displayName"];

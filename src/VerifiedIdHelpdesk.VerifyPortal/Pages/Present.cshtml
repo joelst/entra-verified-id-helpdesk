@@ -36,9 +36,11 @@
 
 @section Scripts {
 <script>
-    const sessionId = '@Html.Raw(Model.SessionId)';
-    const apiBase = '@Html.Raw(Model.ApiBaseUrl)';
-    const expiresAt = new Date('@Html.Raw(Model.ExpiresAt.ToUniversalTime().ToString("O"))');
+    // SECURITY: Model values are Razor-encoded (not Html.Raw) to prevent XSS.
+    // SessionId is a server-generated GUID; ApiBaseUrl comes from config.
+    const sessionId = '@Model.SessionId';
+    const apiBase = '@Model.ApiBaseUrl';
+    const expiresAt = new Date('@Model.ExpiresAt.ToUniversalTime().ToString("O")');
 
     function updateCountdown() {
         const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));

@@ -1,6 +1,6 @@
 # Entra Verified ID Helpdesk
 
-[![Build](https://github.com/YOUR_ORG/entra-verified-id-helpdesk/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_ORG/entra-verified-id-helpdesk/actions/workflows/build.yml)
+[![Build](https://github.com/joelst/entra-verified-id-helpdesk/actions/workflows/build.yml/badge.svg)](https://github.com/joelst/entra-verified-id-helpdesk/actions/workflows/build.yml)
 
 A .NET 10 sample showing how a helpdesk team can verify caller identity using [Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/decentralized-identifier-overview). When an employee calls the helpdesk, an agent generates an 8-character one-time code and sends it by email or Microsoft Teams. The caller opens a public web page, enters their email and the code, then approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity — name, employee ID, department — appear in real time via SignalR, without ever asking the caller a security question.
 
@@ -82,7 +82,7 @@ flowchart TD
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_ORG/entra-verified-id-helpdesk.git
+git clone https://github.com/joelst/entra-verified-id-helpdesk.git
 cd entra-verified-id-helpdesk
 ```
 

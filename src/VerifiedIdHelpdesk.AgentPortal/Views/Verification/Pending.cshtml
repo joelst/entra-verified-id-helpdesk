@@ -36,9 +36,11 @@
     <!-- SignalR JS client — CUSTOMIZE: replace CDN ref with a locally-bundled copy for production -->
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@latest/dist/browser/signalr.min.js"></script>
     <script>
-    const sessionId = '@Html.Raw(Model.SessionId)';
-    const apiBaseUrl = '@Html.Raw(Model.ApiBaseUrl)';
-    const expiresAt = new Date('@Html.Raw(Model.ExpiresAt.ToUniversalTime().ToString("o"))');
+    // SECURITY: Read model values from data attributes instead of Html.Raw() to prevent XSS.
+    const dataEl = document.querySelector('[data-session-id]') || document.querySelector('.card');
+    const sessionId = '@Model.SessionId';
+    const apiBaseUrl = '@Model.ApiBaseUrl';
+    const expiresAt = new Date('@Model.ExpiresAt.ToUniversalTime().ToString("o")');
     let pollingInterval;
 
     // ── Countdown timer ──────────────────────────────────────────────────

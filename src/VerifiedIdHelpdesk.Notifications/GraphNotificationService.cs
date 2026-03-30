@@ -84,7 +84,10 @@ enter your email address and the code above, then approve the request in Microso
         // Resolve recipient UPN → user ID
         var users = await _graph.Users.GetAsync(req =>
         {
-            req.QueryParameters.Filter = $"mail eq '{recipientEmail}'";
+            // SECURITY: Escape single quotes in the email to prevent OData filter injection.
+            // OData uses single quotes as string delimiters; unescaped quotes could break the filter.
+            var sanitizedEmail = recipientEmail.Replace("'", "''");
+            req.QueryParameters.Filter = $"mail eq '{sanitizedEmail}'";
             req.QueryParameters.Select = ["id", "displayName"];
             req.QueryParameters.Top = 1;
         });

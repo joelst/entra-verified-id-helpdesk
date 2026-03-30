@@ -55,6 +55,7 @@ builder.Services.AddSingleton(_ =>
 });
 
 // Application services
+builder.Services.AddHttpClient("VerifiedIdClient"); // Named HttpClient for Entra Verified ID API
 builder.Services.AddSingleton<ISessionStore, AzureTableSessionStore>();
 builder.Services.AddSingleton<IVerifiedIdClient, EntraVerifiedIdClient>();
 builder.Services.AddSingleton<INotificationService, GraphNotificationService>();

@@ -1,6 +1,8 @@
 # Build output
 bin/
 obj/
+publish/
+out/
 
 # Visual Studio
 .vs/
@@ -8,12 +10,17 @@ obj/
 *.suo
 *.userosscache
 *.sln.docstates
+launchSettings.json
 
 # Rider
 .idea/
 
+# VS Code
+.vscode/
+
 # macOS
 .DS_Store
+Thumbs.db
 
 # NuGet
 *.nupkg
@@ -21,15 +28,31 @@ obj/
 packages/
 !.nuget/NuGet.Config
 
-# Secrets — never commit secrets
+# Secrets — never commit real config overrides
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json.example
 
+# User secrets
+secrets.json
+.env
+*.pfx
+*.pem
+*.key
+*.p12
+
 # Logs
 *.log
+logs/
+
+# Test results
+TestResults/
+coverage/
 
 # Prevent Office docs from being committed
 *.docx
 *.pptx
 *.xlsx
+
+# Copilot session state (internal — not for public repos)
+.copilot/
