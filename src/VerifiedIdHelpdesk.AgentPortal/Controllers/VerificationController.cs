@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Identity.Web;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +16,7 @@ namespace VerifiedIdHelpdesk.AgentPortal.Controllers;
 public class VerificationController : Controller
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITokenAcquisition _tokenAcquisition;
     private readonly IConfiguration _config;
     private readonly ILogger<VerificationController> _logger;
 
@@ -22,10 +24,12 @@ public class VerificationController : Controller
 
     public VerificationController(
         IHttpClientFactory httpClientFactory,
+        ITokenAcquisition tokenAcquisition,
         IConfiguration config,
         ILogger<VerificationController> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _tokenAcquisition = tokenAcquisition;
         _config = config;
         _logger = logger;
     }
@@ -156,12 +160,28 @@ public class VerificationController : Controller
     [AllowAnonymous]
     public IActionResult AccessDenied() => View();
 
-    private static Task<string?> GetApiAccessTokenAsync()
+    private async Task<string?> GetApiAccessTokenAsync()
     {
-        // CUSTOMIZE: In production, acquire a proper OBO token using ITokenAcquisition.
-        // For the sample, the AgentPortal uses its own identity to call the API.
-        // See: https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-on-behalf-of-flow
-        return Task.FromResult<string?>(null); // Token acquisition wired via Microsoft.Identity.Web in production
+        var scopes = _config.GetSection("Api:Scopes").Get<string[]>();
+        if (scopes is null || scopes.Length == 0)
+        {
+            _logger.LogWarning("Api:Scopes not configured — API calls will be unauthenticated.");
+            return null;
+        }
+
+        try
+        {
+            return await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
+        }
+        catch (MicrosoftIdentityWebChallengeUserException)
+        {
+            throw; // Let MIWA handle the re-auth redirect
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to acquire OBO token for API");
+            return null;
+        }
     }
 }
 

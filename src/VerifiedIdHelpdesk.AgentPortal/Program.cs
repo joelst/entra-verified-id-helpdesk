@@ -20,9 +20,10 @@ builder.Configuration.AddAzureKeyVault(
 // ── Authentication — Entra OIDC ───────────────────────────────────────────
 // SECURITY: All portal pages require Entra authentication (fallback policy below).
 // CUSTOMIZE: Configure your app registration in appsettings.json under AzureAd.
+var apiScopes = builder.Configuration.GetSection("Api:Scopes").Get<string[]>() ?? [];
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
-    .EnableTokenAcquisitionToCallDownstreamApi()
+    .EnableTokenAcquisitionToCallDownstreamApi(apiScopes)
     .AddMicrosoftGraph(builder.Configuration.GetSection("MicrosoftGraph"))
     .AddInMemoryTokenCaches();
 

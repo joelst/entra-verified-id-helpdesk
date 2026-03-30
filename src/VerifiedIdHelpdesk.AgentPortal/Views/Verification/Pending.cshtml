@@ -6,10 +6,20 @@
 <div class="card">
     <div class="card-title">Verification Pending</div>
 
-    <div class="alert alert-info">
-        Read this code to your caller, or confirm they received it via
-        <strong>@Model.DeliveryChannel</strong>.
-    </div>
+    @if (Model.DeliveryChannel == "verbal")
+    {
+        <div class="alert alert-warning" style="font-size:1.1em;">
+            <strong>🗣️ Read this code to the caller now.</strong> They need to enter it at the
+            verification portal to proceed. Do not share it via chat or email — verbal only.
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            Read this code to your caller, or confirm they received it via
+            <strong>@Model.DeliveryChannel</strong>.
+        </div>
+    }
 
     <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
 

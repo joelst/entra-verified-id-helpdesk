@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "9304531936994030360"
+      "templateHash": "12179022930391737825"
     }
   },
   "parameters": {
@@ -395,6 +395,10 @@
             {
               "name": "Api__BaseUrl",
               "value": "[variables('apiBaseUrl')]"
+            },
+            {
+              "name": "Api__Scopes__0",
+              "value": "[format('api://{0}/access_as_agent', parameters('clientId'))]"
             },
             {
               "name": "AzureAd__ClientCertificates__0__SourceType",
