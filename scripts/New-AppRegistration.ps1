@@ -170,6 +170,11 @@ $requiredAccess = @(
         resourceAppId  = $GraphAppId
         resourceAccess = @($graphPermIds | ForEach-Object { @{ id = $_; type = 'Role' } })
     }
+    # Self-referential delegated permission for OBO flow (AgentPortal → API)
+    @{
+        resourceAppId  = $appId
+        resourceAccess = @(@{ id = $scopeId; type = 'Scope' })
+    }
 )
 
 if ($vcSp) {
@@ -199,6 +204,42 @@ $appId = $app.appId
 $appObjId = $app.id
 Write-Information "  Application (client) ID : $appId"
 Write-Information "  Object ID               : $appObjId"
+
+# ---------------------------------------------------------------------------
+# Expose an API scope — required for OBO token flow (AgentPortal → API)
+# ---------------------------------------------------------------------------
+
+Write-Step 'Exposing API scope for OBO token flow'
+
+$scopeId = [System.Guid]::NewGuid().ToString()
+$apiScopeJson = @{
+    requestedAccessTokenVersion = 2
+    oauth2PermissionScopes      = @(
+        @{
+            id                      = $scopeId
+            adminConsentDescription = 'Allows the Agent Portal to call the backend API on behalf of the signed-in user.'
+            adminConsentDisplayName = 'Access Helpdesk API as agent'
+            isEnabled               = $true
+            type                    = 'User'
+            userConsentDescription  = 'Allows the Agent Portal to call the backend API on your behalf.'
+            userConsentDisplayName  = 'Access Helpdesk API'
+            value                   = 'access_as_agent'
+        }
+    )
+} | ConvertTo-Json -Depth 10 -Compress
+
+$apiTempFile = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "$([System.Guid]::NewGuid()).json")
+$apiScopeJson | Set-Content $apiTempFile -Encoding UTF8
+
+az ad app update --id $appId --identifier-uris "api://$appId" --set "api=@$apiTempFile"
+Remove-Item $apiTempFile
+
+# Pre-authorize the app to use its own scope (same-app OBO)
+az ad app update --id $appId `
+    --set "api.preAuthorizedApplications=[{""appId"":""$appId"",""delegatedPermissionIds"":[""$scopeId""]}]"
+
+Write-Information "  Application ID URI : api://$appId"
+Write-Information "  Scope              : access_as_agent (id: $scopeId)"
 
 # ---------------------------------------------------------------------------
 # Create the service principal so admin-consent can target it
@@ -305,6 +346,7 @@ else {
     Write-Output "  AzureAd:ClientCertificates:0:KeyVaultCertificateName = $CertName"
     Write-Output "  VerifiedId:TenantId                              = $tenantId"
     Write-Output "  VerifiedId:ClientId                              = $appId"
+    Write-Output "  Api:Scopes:0                                     = api://$appId/access_as_agent"
     Write-Output ''
     Write-Output '-- App Service Application Settings (env vars) -------'
     Write-Output "  AzureAd__TenantId=$tenantId"
