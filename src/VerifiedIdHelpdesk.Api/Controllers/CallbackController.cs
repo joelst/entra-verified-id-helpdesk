@@ -148,6 +148,7 @@ public class CallbackController : ControllerBase
                 ValidateIssuer = false,
                 ValidateAudience = false,
                 ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
                 IssuerSigningKeys = oidcConfig.SigningKeys,
                 ClockSkew = TimeSpan.FromMinutes(5)
             }, out _);

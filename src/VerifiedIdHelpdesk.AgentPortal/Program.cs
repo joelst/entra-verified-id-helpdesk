@@ -67,6 +67,18 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Security headers — applied before any response is written
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin");
+    context.Response.Headers.Append("Content-Security-Policy",
+        "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:;");
+    await next();
+});
+
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthentication();
