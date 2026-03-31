@@ -45,7 +45,7 @@ public class GraphNotificationService : INotificationService
             ?? throw new InvalidOperationException("Notifications:SenderEmail is not configured.");
 
         var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
-            ?? "https://verify.yourdomain.com";
+            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is not configured.");
 
         var expiryText = expiresAt.ToString("HH:mm UTC");
         var body = $@"
@@ -78,7 +78,8 @@ enter your email address and the code above, then approve the request in Microso
         var senderUserId = _config["Notifications:SenderUserId"]
             ?? throw new InvalidOperationException("Notifications:SenderUserId is not configured.");
 
-        var verifyPortalUrl = _config["VerifyPortal:BaseUrl"] ?? "https://verify.yourdomain.com";
+        var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
+            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is not configured.");
         var expiryText = expiresAt.ToString("HH:mm UTC");
 
         // Resolve recipient UPN → user ID

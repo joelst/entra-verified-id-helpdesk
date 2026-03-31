@@ -13,7 +13,7 @@
         <span class="active-sessions-title">Your Active Verifications</span>
         <span id="sessionCount" class="badge badge-pending"></span>
     </div>
-    <div id="sessionCards" class="session-cards"></div>
+    <div id="sessionCards" class="session-cards" aria-live="polite"></div>
 </div>
 
 <div class="card">
@@ -30,7 +30,7 @@
             <label class="form-label">Caller Name or Email</label>
             <input type="text" id="callerSearch" class="form-control"
                    placeholder="Start typing a name or email address..." autocomplete="off" />
-            <div id="searchResults" class="search-results" style="display:none;"></div>
+            <div id="searchResults" class="search-results" style="display:none;" aria-live="polite" role="listbox"></div>
             <div id="selectedCaller" class="alert alert-info" style="display:none;margin-top:8px;"></div>
             <div id="manualEntry" style="display:none;margin-top:8px;">
                 <small style="color:var(--color-text-muted);">Enter the caller's email manually:</small>

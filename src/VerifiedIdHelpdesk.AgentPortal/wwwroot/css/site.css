@@ -130,3 +130,67 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* ── Empty states ──────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--color-text-muted);
+}
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.empty-state-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+.empty-state-text {
+  font-size: var(--font-size-base);
+}
+
+/* ── Status badge icons (WCAG: don't rely on color alone) ── */
+.badge-verified::before { content: "✓ "; }
+.badge-failed::before   { content: "✗ "; }
+.badge-expired::before  { content: "⏱ "; }
+.badge-pending::before  { content: "⏳ "; }
+
+/* ── Loading spinner ───────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Code copy button ──────────────────────────────────── */
+.code-display-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  margin: 20px 0;
+}
+.code-display-wrapper .code-display {
+  margin: 0;
+}
+.btn-copy {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-copy:hover {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}

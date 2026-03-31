@@ -76,7 +76,7 @@ public class VerificationController : ControllerBase
             DeliveryChannel = request.DeliveryChannel.ToLowerInvariant(),
             Status = "pending",
             CreatedAt = now,
-            ExpiresAt = now.AddMinutes(Constants.CodeExpiryMinutes)
+            ExpiresAt = now.AddMinutes(_config.GetValue("VerifiedId:CodeExpiryMinutes", Constants.CodeExpiryMinutes))
         };
 
         await _sessions.CreateAsync(session);

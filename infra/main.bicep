@@ -67,6 +67,9 @@ param repoUrl string = 'https://github.com/joelst/entra-verified-id-helpdesk'
 @description('Git branch to deploy from.')
 param repoBranch string = 'main'
 
+@description('Enable Always-On for all App Services. Recommended for production to prevent cold starts; disable for dev/test to reduce costs.')
+param alwaysOn bool = false
+
 // ── Naming variables ──────────────────────────────────────────────────────────
 //
 // CUSTOMIZE: Adjust these naming conventions to match your organisation's standards.
@@ -199,6 +202,7 @@ resource apiApp 'Microsoft.Web/sites@2024-04-01' = {
     serverFarmId: appServicePlan.id
     httpsOnly: true
     siteConfig: {
+      alwaysOn: alwaysOn
       linuxFxVersion: 'DOTNETCORE|10.0' // CUSTOMIZE: Update when new LTS is available
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
@@ -249,6 +253,7 @@ resource agentsApp 'Microsoft.Web/sites@2024-04-01' = {
     serverFarmId: appServicePlan.id
     httpsOnly: true
     siteConfig: {
+      alwaysOn: alwaysOn
       linuxFxVersion: 'DOTNETCORE|10.0'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
@@ -301,6 +306,7 @@ resource verifyApp 'Microsoft.Web/sites@2024-04-01' = {
     serverFarmId: appServicePlan.id
     httpsOnly: true
     siteConfig: {
+      alwaysOn: alwaysOn
       linuxFxVersion: 'DOTNETCORE|10.0'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'

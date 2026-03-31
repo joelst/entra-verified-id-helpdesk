@@ -8,7 +8,12 @@
 
     @if (Model.Sessions.Count == 0)
     {
-        <div class="alert alert-info">No verification sessions found.</div>
+        <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <div class="empty-state-title">No verifications yet</div>
+            <div class="empty-state-text">Your completed verifications will appear here.</div>
+            <a asp-action="Create" class="btn btn-primary" style="margin-top: 16px;">Start a Verification</a>
+        </div>
     }
     else
     {

@@ -28,9 +28,12 @@
         </div>
     }
 
-    <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
+    <div class="code-display-wrapper">
+        <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
+        <button type="button" class="btn btn-sm btn-copy" id="copyCodeBtn" title="Copy code to clipboard">📋 Copy</button>
+    </div>
 
-    <div class="countdown" id="countdown"></div>
+    <div class="countdown" id="countdown" aria-live="polite"></div>
 
     <div style="margin: 20px 0; color: var(--color-text-muted);">
         <strong>Caller:</strong> @Model.CallerDisplayName<br />
@@ -41,7 +44,7 @@
         <strong>Channel:</strong> @Model.DeliveryChannel
     </div>
 
-    <div id="statusMessage" class="alert" style="display:none;"></div>
+    <div id="statusMessage" class="alert" style="display:none;" aria-live="assertive"></div>
 
     <div id="resultPanel" class="result-verified" style="display:none;">
         <div class="result-name" id="resultName"></div>

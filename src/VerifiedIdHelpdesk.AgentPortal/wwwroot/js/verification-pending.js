@@ -99,3 +99,17 @@ function showStatus(type, message) {
         document.getElementById('expiredActions').style.display = 'block';
     }
 }
+
+// ── Copy code to clipboard ───────────────────────────────────────────
+document.getElementById('copyCodeBtn')?.addEventListener('click', function () {
+    const code = document.getElementById('verificationCode')?.textContent?.trim();
+    if (code) {
+        navigator.clipboard.writeText(code).then(() => {
+            this.textContent = '✓ Copied';
+            setTimeout(() => { this.textContent = '📋 Copy'; }, 2000);
+        }).catch(() => {
+            this.textContent = '✗ Failed';
+            setTimeout(() => { this.textContent = '📋 Copy'; }, 2000);
+        });
+    }
+});

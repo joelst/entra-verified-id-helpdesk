@@ -3,6 +3,7 @@ using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Identity.Web;
+using Swashbuckle.AspNetCore.SwaggerGen;
 using System.Threading.RateLimiting;
 using VerifiedIdHelpdesk.Core;
 using VerifiedIdHelpdesk.Core.Interfaces;
@@ -70,6 +71,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 }
 
 builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
 
 // SECURITY: Enforce secure cookie defaults
 builder.Services.Configure<CookiePolicyOptions>(options =>
@@ -81,6 +83,18 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 
 // Health checks
 builder.Services.AddHealthChecks();
+
+// OpenAPI / Swagger — Development only (see middleware below)
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+    {
+        Title = "Verified ID Helpdesk API",
+        Version = "v1",
+        Description = "Backend API for the Entra Verified ID Helpdesk"
+    });
+});
 
 // Rate limiting — protect public endpoints from abuse
 builder.Services.AddRateLimiter(options =>
@@ -119,6 +133,13 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// Swagger UI — Development only (exposes API schema, never enable in production)
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 // Security headers
 app.Use(async (context, next) =>

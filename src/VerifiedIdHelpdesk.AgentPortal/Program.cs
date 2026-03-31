@@ -60,13 +60,14 @@ builder.Services.AddHttpClient("ApiClient", (sp, client) =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
     client.BaseAddress = new Uri(config["Api:BaseUrl"]!);
-});
+}).AddStandardResilienceHandler();
 
 // ── MVC + Identity UI ─────────────────────────────────────────────────────
 builder.Services.AddControllersWithViews()
     .AddMicrosoftIdentityUI();
 
 builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks();
 
 // SECURITY: Enforce secure cookie defaults

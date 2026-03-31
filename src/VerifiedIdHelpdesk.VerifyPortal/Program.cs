@@ -21,7 +21,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.CookieTempDataProviderOption
 builder.Services.AddHttpClient("ApiClient", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Api:BaseUrl"]!);
-});
+}).AddStandardResilienceHandler();
 
 builder.Services.AddApplicationInsightsTelemetry();
 builder.Services.AddHealthChecks();
