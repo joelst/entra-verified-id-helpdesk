@@ -1,0 +1,20 @@
+@{
+    var currentStep = (int)(ViewData["CurrentStep"] ?? 1);
+}
+
+<nav class="step-indicator" aria-label="Verification progress">
+    <div class="step @(currentStep >= 1 ? "step-active" : "") @(currentStep > 1 ? "step-done" : "")">
+        <span class="step-number">@(currentStep > 1 ? "✓" : "1")</span>
+        <span class="step-label">Generate Code</span>
+    </div>
+    <div class="step-connector @(currentStep > 1 ? "step-connector-done" : "")"></div>
+    <div class="step @(currentStep >= 2 ? "step-active" : "") @(currentStep > 2 ? "step-done" : "")">
+        <span class="step-number">@(currentStep > 2 ? "✓" : "2")</span>
+        <span class="step-label">Awaiting Verification</span>
+    </div>
+    <div class="step-connector @(currentStep > 2 ? "step-connector-done" : "")"></div>
+    <div class="step @(currentStep >= 3 ? "step-active" : "")">
+        <span class="step-number">3</span>
+        <span class="step-label">Verified</span>
+    </div>
+</nav>

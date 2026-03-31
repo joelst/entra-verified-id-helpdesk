@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "14161452394407991551"
+      "templateHash": "5859884984328036478"
     }
   },
   "parameters": {
@@ -309,6 +309,10 @@
             {
               "name": "VerifyPortal__BaseUrl",
               "value": "[variables('verifyBaseUrl')]"
+            },
+            {
+              "name": "Api__BaseUrl",
+              "value": "[variables('apiBaseUrl')]"
             },
             {
               "name": "Notifications__SenderEmail",

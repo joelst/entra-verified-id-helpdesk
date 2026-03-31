@@ -72,7 +72,7 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
+    app.UseExceptionHandler("/Verification/Error");
     // SECURITY: HSTS enforces HTTPS for 1 year. Do not change the max-age below 31536000 in production.
     app.UseHsts();
 }
@@ -83,9 +83,11 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("X-Frame-Options", "DENY");
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Append("Referrer-Policy", "strict-origin");
+    var apiBaseUrl = app.Configuration["Api:BaseUrl"] ?? "";
     context.Response.Headers.Append("Content-Security-Policy",
-        "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
-        "style-src 'self' 'unsafe-inline'; img-src 'self' data:;");
+        $"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
+        $"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+        $"connect-src 'self' {apiBaseUrl} wss://{new Uri(apiBaseUrl).Host};");
     await next();
 });
 

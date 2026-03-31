@@ -1,7 +1,10 @@
 @model PendingViewModel
 @{
     ViewData["Title"] = "Waiting for Verification";
+    ViewData["CurrentStep"] = 2;
 }
+
+<partial name="_StepIndicator" />
 
 <div class="card" id="pendingData"
      data-session-id="@Model.SessionId"
@@ -43,6 +46,10 @@
     <div id="resultPanel" class="result-verified" style="display:none;">
         <div class="result-name" id="resultName"></div>
         <div class="result-meta" id="resultMeta"></div>
+    </div>
+
+    <div id="expiredActions" class="expired-actions" style="display:none;">
+        <a asp-action="Create" class="btn btn-primary">← Start New Verification</a>
     </div>
 </div>
 
