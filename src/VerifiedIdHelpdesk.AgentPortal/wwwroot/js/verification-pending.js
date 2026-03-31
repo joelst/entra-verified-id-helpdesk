@@ -57,7 +57,7 @@ function startPolling() {
 
 async function pollStatus() {
     try {
-        const resp = await fetch(`${apiBaseUrl}/api/verification/status/${sessionId}`);
+        const resp = await fetch(`${apiBaseUrl}/api/verification/public-status/${sessionId}`);
         if (!resp.ok) return;
         const data = await resp.json();
         if (data.status === 'verified') {
