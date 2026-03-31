@@ -262,7 +262,6 @@ resource agentsApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'AuthorizationGroups__HelpDeskAgents',   value: helpDeskGroupId }
         { name: 'Api__BaseUrl',                          value: apiBaseUrl }
         { name: 'Api__Scopes__0',                        value: 'api://${clientId}/access_as_agent' }
-        { name: 'MicrosoftGraph__Scopes__0',              value: 'https://graph.microsoft.com/.default' }
         // Certificate-based auth
         { name: 'AzureAd__ClientCertificates__0__SourceType',              value: 'KeyVault' }
         { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl',             value: keyVault.properties.vaultUri }

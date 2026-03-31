@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "972765976039988709"
+      "templateHash": "14161452394407991551"
     }
   },
   "parameters": {
@@ -401,10 +401,6 @@
             {
               "name": "Api__Scopes__0",
               "value": "[format('api://{0}/access_as_agent', parameters('clientId'))]"
-            },
-            {
-              "name": "MicrosoftGraph__Scopes__0",
-              "value": "https://graph.microsoft.com/.default"
             },
             {
               "name": "AzureAd__ClientCertificates__0__SourceType",
