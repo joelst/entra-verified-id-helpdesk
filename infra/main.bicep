@@ -219,6 +219,7 @@ resource apiApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'AuthorizationGroups__HelpDeskAgents',   value: helpDeskGroupId }
         { name: 'AgentPortal__BaseUrl',                  value: agentsBaseUrl }
         { name: 'VerifyPortal__BaseUrl',                 value: verifyBaseUrl }
+        { name: 'Api__BaseUrl',                          value: apiBaseUrl }
         { name: 'Notifications__SenderEmail',            value: senderEmail }
         { name: 'Notifications__SenderUserId',           value: senderUserId }
         // Certificate-based auth: M.I.W. reads the full PFX via the KV Secrets endpoint
