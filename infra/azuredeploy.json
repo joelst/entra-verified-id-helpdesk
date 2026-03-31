@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "12179022930391737825"
+      "templateHash": "972765976039988709"
     }
   },
   "parameters": {
@@ -248,6 +248,7 @@
           "linuxFxVersion": "DOTNETCORE|10.0",
           "ftpsState": "Disabled",
           "minTlsVersion": "1.2",
+          "http20Enabled": true,
           "appSettings": [
             {
               "name": "ASPNETCORE_ENVIRONMENT",
@@ -363,6 +364,7 @@
           "linuxFxVersion": "DOTNETCORE|10.0",
           "ftpsState": "Disabled",
           "minTlsVersion": "1.2",
+          "http20Enabled": true,
           "appSettings": [
             {
               "name": "ASPNETCORE_ENVIRONMENT",
@@ -399,6 +401,10 @@
             {
               "name": "Api__Scopes__0",
               "value": "[format('api://{0}/access_as_agent', parameters('clientId'))]"
+            },
+            {
+              "name": "MicrosoftGraph__Scopes__0",
+              "value": "https://graph.microsoft.com/.default"
             },
             {
               "name": "AzureAd__ClientCertificates__0__SourceType",
@@ -446,6 +452,7 @@
           "linuxFxVersion": "DOTNETCORE|10.0",
           "ftpsState": "Disabled",
           "minTlsVersion": "1.2",
+          "http20Enabled": true,
           "appSettings": [
             {
               "name": "ASPNETCORE_ENVIRONMENT",

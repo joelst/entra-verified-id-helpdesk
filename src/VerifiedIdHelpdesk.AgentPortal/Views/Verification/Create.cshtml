@@ -19,6 +19,11 @@
                    placeholder="Start typing a name or email address..." autocomplete="off" />
             <div id="searchResults" class="search-results" style="display:none;"></div>
             <div id="selectedCaller" class="alert alert-info" style="display:none;margin-top:8px;"></div>
+            <div id="manualEntry" style="display:none;margin-top:8px;">
+                <small style="color:var(--color-text-muted);">Enter the caller's email manually:</small>
+                <input type="email" id="manualEmail" class="form-control" style="margin-top:4px;"
+                       placeholder="caller@yourdomain.com" />
+            </div>
         </div>
 
         <div class="form-group">
@@ -82,11 +87,16 @@
             const resp = await fetch(`/api/directory/search?q=${encodeURIComponent(query)}`, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
-            if (!resp.ok) return;
+            if (!resp.ok) {
+                console.error('Directory search returned', resp.status);
+                renderNoResults('Directory search unavailable. You can enter details manually below.');
+                return;
+            }
             const results = await resp.json();
             renderResults(results);
         } catch (e) {
             console.error('Directory search failed:', e);
+            renderNoResults('Directory search unavailable. You can enter details manually below.');
         }
     }
 
@@ -129,6 +139,28 @@
     function hideResults() {
         document.getElementById('searchResults').style.display = 'none';
     }
+
+    function renderNoResults(message) {
+        const container = document.getElementById('searchResults');
+        container.innerHTML = `<div class="search-result-item" style="color:var(--color-text-muted);cursor:default;">${esc(message)}</div>`;
+        container.style.display = 'block';
+        // Show manual entry fallback
+        document.getElementById('manualEntry').style.display = 'block';
+    }
+
+    // Manual email entry — enables the submit button when a valid email is typed
+    document.getElementById('manualEmail').addEventListener('input', function () {
+        const email = this.value.trim();
+        if (email && email.includes('@@')) {
+            const name = document.getElementById('callerSearch').value.trim() || email.split('@@')[0];
+            document.getElementById('callerEmail').value = email;
+            document.getElementById('callerDisplayName').value = name;
+            document.getElementById('callerEntraId').value = 'manual-entry';
+            document.getElementById('submitBtn').disabled = false;
+        } else {
+            document.getElementById('submitBtn').disabled = true;
+        }
+    });
 
     function esc(str) {
         if (!str) return '';
