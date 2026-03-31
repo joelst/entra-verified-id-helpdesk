@@ -36,8 +36,7 @@ public class EntraVerifiedIdClient : IVerifiedIdClient
 
     public async Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl)
     {
-        var tenantId = _config["VerifiedId:TenantId"]!;
-        var url = $"{tenantId}/verifiableCredentials/createPresentationRequest";
+        var url = "verifiableCredentials/createPresentationRequest";
 
         var body = new
         {
