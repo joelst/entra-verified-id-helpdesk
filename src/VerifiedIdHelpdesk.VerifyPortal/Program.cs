@@ -9,6 +9,15 @@ if (!string.IsNullOrEmpty(keyVaultUri))
 
 builder.Services.AddRazorPages();
 
+// TempData is used to pass session data from the Index POST to the Present page.
+// Cookie-based provider is the default but we configure it explicitly to ensure
+// SameSite=Lax (required for POST → redirect → GET cookie flow).
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.CookieTempDataProviderOptions>(options =>
+{
+    options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
+});
+
 builder.Services.AddHttpClient("ApiClient", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Api:BaseUrl"]!);
