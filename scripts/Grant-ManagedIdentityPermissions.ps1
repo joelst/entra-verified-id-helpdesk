@@ -8,6 +8,7 @@
 
     AgentPortal gets: User.Read.All, GroupMember.Read.All (directory search, group checks)
     API gets: User.Read.All, Mail.Send, Chat.Create, Chat.ReadWrite.All (notifications)
+    API gets: VerifiableCredential.Create.All (Entra Verified ID presentation requests)
 
     Prerequisites:
       - Azure CLI installed and logged in
@@ -199,6 +200,31 @@ foreach ($permName in $apiPermNames) {
 }
 
 # ---------------------------------------------------------------------------
+# Grant Verified ID permission to API managed identity
+# ---------------------------------------------------------------------------
+
+Write-Step "Granting Verified ID permission to API ($apiAppName)"
+
+$VerifiedIdAppId = '3db474b9-6a0c-4840-96ac-1fceb342124f'
+$vcSp = az ad sp show --id $VerifiedIdAppId 2>$null | ConvertFrom-Json
+if (-not $vcSp) {
+    Write-Warning 'Entra Verified ID service principal not found in this tenant.'
+    Write-Warning 'Grant VerifiableCredential.Create.All to the API managed identity manually.'
+}
+else {
+    $vcSpObjectId = $vcSp.id
+    $vcRoleId = Get-AppRoleId $vcSp 'VerifiableCredential.Create.All'
+    Write-Information "  VerifiableCredential.Create.All = $vcRoleId"
+
+    Grant-AppRole `
+        -PrincipalId $apiIdentity.principalId `
+        -PrincipalDisplayName $apiAppName `
+        -GraphSpObjectId $vcSpObjectId `
+        -AppRoleId $vcRoleId `
+        -PermissionName 'VerifiableCredential.Create.All'
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
@@ -212,6 +238,7 @@ Write-Output "    - $($agentPermNames -join ', ')"
 Write-Output ''
 Write-Output "  API ($apiAppName):"
 Write-Output "    - $($apiPermNames -join ', ')"
+Write-Output "    - VerifiableCredential.Create.All (Entra Verified ID)"
 Write-Output ''
 Write-Output '  Note: It may take a few minutes for permissions to propagate.'
 Write-Output ''
