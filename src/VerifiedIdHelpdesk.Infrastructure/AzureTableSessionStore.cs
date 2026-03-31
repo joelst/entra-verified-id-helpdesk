@@ -113,6 +113,34 @@ public class AzureTableSessionStore : ISessionStore
         return expiredSessions.Count;
     }
 
+    public async Task<IReadOnlyList<VerificationSession>> GetByAgentAsync(string agentEntraId, int limit = 50)
+    {
+        var filter = TableClient.CreateQueryFilter(
+            $"PartitionKey eq {Constants.SessionPartitionKey} and AgentEntraId eq {agentEntraId}");
+
+        var sessions = new List<VerificationSession>();
+        await foreach (var entity in _table.QueryAsync<TableEntity>(filter: filter))
+            sessions.Add(FromEntity(entity));
+
+        // Table Storage doesn't support ORDER BY — sort in memory
+        return sessions
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(limit)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<VerificationSession>> GetPendingByAgentAsync(string agentEntraId)
+    {
+        var filter = TableClient.CreateQueryFilter(
+            $"PartitionKey eq {Constants.SessionPartitionKey} and AgentEntraId eq {agentEntraId} and Status eq {"pending"}");
+
+        var sessions = new List<VerificationSession>();
+        await foreach (var entity in _table.QueryAsync<TableEntity>(filter: filter))
+            sessions.Add(FromEntity(entity));
+
+        return sessions.OrderByDescending(s => s.CreatedAt).ToList();
+    }
+
     private static TableEntity ToEntity(VerificationSession s) => new(Constants.SessionPartitionKey, s.SessionId)
     {
         ["CodeHash"] = s.CodeHash,

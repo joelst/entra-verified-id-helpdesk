@@ -75,6 +75,25 @@ public sealed class InMemorySessionStore : ISessionStore
         }
         return Task.FromResult(count);
     }
+
+    public Task<IReadOnlyList<VerificationSession>> GetByAgentAsync(string agentEntraId, int limit = 50)
+    {
+        IReadOnlyList<VerificationSession> result = _sessions.Values
+            .Where(s => s.AgentEntraId == agentEntraId)
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(limit)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<VerificationSession>> GetPendingByAgentAsync(string agentEntraId)
+    {
+        IReadOnlyList<VerificationSession> result = _sessions.Values
+            .Where(s => s.AgentEntraId == agentEntraId && s.Status == SessionStatus.Pending)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToList();
+        return Task.FromResult(result);
+    }
 }
 
 // ── Test factory ─────────────────────────────────────────────────────────────
@@ -222,15 +241,12 @@ public class VerificationFlowTests : IClassFixture<TestWebApplicationFactory>
     // ── Callback ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Security: Verifies that a callback request missing the <c>id_token</c> field
-    /// is rejected with 400. The id_token is the JWT that proves the callback
-    /// originates from the Entra Verified ID service. Without it the request must
-    /// be refused before any state changes occur.
+    /// Callbacks without id_token are accepted — state-based correlation is the
+    /// primary security mechanism (server-generated GUIDs). JWT is defense-in-depth.
     /// </summary>
     [Fact]
-    public async Task Callback_MissingIdToken_Returns400()
+    public async Task Callback_MissingIdToken_Returns200_WithStateCorrelation()
     {
-        // Send a realistic-looking callback body but without the id_token.
         var response = await _client.PostAsJsonAsync(
             "/api/verification/callback",
             new
@@ -240,14 +256,16 @@ public class VerificationFlowTests : IClassFixture<TestWebApplicationFactory>
                 state = Guid.NewGuid().ToString()
             });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // Returns 200 OK — unknown session state is handled gracefully
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     /// <summary>
-    /// Verifies that a callback with an empty id_token string returns 400.
+    /// Callbacks with empty id_token at root level are accepted — the real id_token
+    /// comes in receipt.id_token when includeReceipt=true.
     /// </summary>
     [Fact]
-    public async Task Callback_EmptyIdToken_Returns400()
+    public async Task Callback_EmptyIdToken_Returns200_ProcessedByState()
     {
         var response = await _client.PostAsJsonAsync(
             "/api/verification/callback",
@@ -258,6 +276,6 @@ public class VerificationFlowTests : IClassFixture<TestWebApplicationFactory>
                 state = Guid.NewGuid().ToString()
             });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 }

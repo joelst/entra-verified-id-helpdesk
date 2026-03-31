@@ -200,6 +200,29 @@ public class VerificationController : ControllerBase
         });
     }
 
+    [HttpGet("my-sessions")]
+    [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
+    public async Task<IActionResult> MySessions([FromQuery] int limit = 50)
+    {
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        var sessions = await _sessions.GetByAgentAsync(agentEntraId, Math.Min(limit, 100));
+
+        var result = sessions.Select(s => new
+        {
+            sessionId = s.SessionId,
+            callerDisplayName = s.CallerDisplayName,
+            callerEmail = s.CallerEmail,
+            ticketId = s.TicketId,
+            deliveryChannel = s.DeliveryChannel,
+            status = s.Status,
+            createdAt = s.CreatedAt,
+            verifiedAt = s.VerifiedAt
+        });
+
+        return Ok(result);
+    }
+
     private static string MaskEmail(string email)
     {
         var at = email.IndexOf('@');

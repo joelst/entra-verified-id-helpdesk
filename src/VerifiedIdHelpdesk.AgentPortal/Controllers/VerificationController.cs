@@ -163,6 +163,24 @@ public class VerificationController : Controller
     [AllowAnonymous]
     public IActionResult Error() => View();
 
+    // GET /Verification/History
+    [HttpGet]
+    public async Task<IActionResult> History()
+    {
+        var client = _httpClientFactory.CreateClient("ApiClient");
+
+        var response = await client.GetAsync("/api/verification/my-sessions?limit=50");
+        if (!response.IsSuccessStatusCode)
+        {
+            // If the API call fails (e.g. no auth), show an empty history
+            return View(new HistoryViewModel { Sessions = [] });
+        }
+
+        var sessions = JsonSerializer.Deserialize<List<SessionSummary>>(
+            await response.Content.ReadAsStringAsync(), JsonOptions) ?? [];
+
+        return View(new HistoryViewModel { Sessions = sessions });
+    }
     private async Task<string?> GetApiAccessTokenAsync()
     {
         var scopes = _config.GetSection("Api:Scopes").Get<string[]>();
@@ -222,3 +240,20 @@ public class ResultViewModel
 
 public record GenerateResponse(string SessionId, string DisplayCode, DateTime ExpiresAt);
 public record StatusResponse(string Status, string? VerifiedClaims, DateTime? VerifiedAt);
+
+public class HistoryViewModel
+{
+    public List<SessionSummary> Sessions { get; set; } = [];
+}
+
+public class SessionSummary
+{
+    public string SessionId { get; set; } = string.Empty;
+    public string CallerDisplayName { get; set; } = string.Empty;
+    public string CallerEmail { get; set; } = string.Empty;
+    public string TicketId { get; set; } = string.Empty;
+    public string DeliveryChannel { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+}
