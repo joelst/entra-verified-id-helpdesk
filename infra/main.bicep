@@ -202,6 +202,7 @@ resource apiApp 'Microsoft.Web/sites@2024-04-01' = {
       linuxFxVersion: 'DOTNETCORE|10.0' // CUSTOMIZE: Update when new LTS is available
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      http20Enabled: true
       appSettings: [
         { name: 'ASPNETCORE_ENVIRONMENT',                value: 'Production' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
@@ -250,6 +251,7 @@ resource agentsApp 'Microsoft.Web/sites@2024-04-01' = {
       linuxFxVersion: 'DOTNETCORE|10.0'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      http20Enabled: true
       appSettings: [
         { name: 'ASPNETCORE_ENVIRONMENT',                value: 'Production' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
@@ -302,6 +304,7 @@ resource verifyApp 'Microsoft.Web/sites@2024-04-01' = {
       linuxFxVersion: 'DOTNETCORE|10.0'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      http20Enabled: true
       appSettings: [
         { name: 'ASPNETCORE_ENVIRONMENT',                value: 'Production' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
