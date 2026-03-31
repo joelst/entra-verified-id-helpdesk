@@ -84,7 +84,11 @@ public class EntraVerifiedIdClient : IVerifiedIdClient
 
         var client = _httpClientFactory.CreateClient("VerifiedIdClient");
         var json = JsonSerializer.Serialize(body);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{url}")
+        var fullUrl = $"{baseUrl}{url}";
+
+        _logger.LogDebug("VerifiedId API request: POST {Url}", fullUrl);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, fullUrl)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
@@ -95,7 +99,9 @@ public class EntraVerifiedIdClient : IVerifiedIdClient
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("VerifiedId API error {Status}: {Body}", response.StatusCode, responseBody);
+            _logger.LogError(
+                "VerifiedId API error {Status} for {Url}: {Body}",
+                response.StatusCode, fullUrl, responseBody);
             throw new HttpRequestException($"VerifiedId API returned {response.StatusCode}");
         }
 
