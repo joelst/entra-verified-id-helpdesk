@@ -91,7 +91,7 @@ public class AzureTableSessionStore : ISessionStore
 
     public async Task<int> ExpireOldSessionsAsync()
     {
-        var now = DateTime.UtcNow.ToString("o");
+        var now = DateTimeOffset.UtcNow;
         var filter = TableClient.CreateQueryFilter(
             $"PartitionKey eq {Constants.SessionPartitionKey} and Status eq {"pending"} and ExpiresAt le {now}");
 
