@@ -16,7 +16,10 @@ function updateCountdown() {
         ? `Expires in ${mins}:${secs.toString().padStart(2, '0')}`
         : 'Code expired';
     if (remaining <= 60) el.classList.add('expiring-soon');
-    if (remaining === 0) clearInterval(countdownInterval);
+    if (remaining === 0) {
+        clearInterval(countdownInterval);
+        document.getElementById('expiredActions').style.display = 'block';
+    }
 }
 const countdownInterval = setInterval(updateCountdown, 1000);
 updateCountdown();
@@ -91,4 +94,8 @@ function showStatus(type, message) {
     el.className = `alert alert-${type === 'error' ? 'error' : 'info'}`;
     el.textContent = message;
     el.style.display = 'block';
+
+    if (type === 'error') {
+        document.getElementById('expiredActions').style.display = 'block';
+    }
 }

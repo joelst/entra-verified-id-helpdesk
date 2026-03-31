@@ -1,7 +1,10 @@
 @model ResultViewModel
 @{
     ViewData["Title"] = "Identity Verified";
+    ViewData["CurrentStep"] = 3;
 }
+
+<partial name="_StepIndicator" />
 
 <div class="card">
     <div class="card-title">Identity Verified</div>

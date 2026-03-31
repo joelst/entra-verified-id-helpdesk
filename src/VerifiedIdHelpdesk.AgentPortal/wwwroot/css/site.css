@@ -1,2 +1,79 @@
 /* Agent Portal — overrides on top of theme.css */
 /* Add portal-specific styles here. Keep general theming in theme.css. */
+
+/* ── Step indicator ────────────────────────────────────── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 24px;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: var(--color-white);
+  flex-shrink: 0;
+}
+.step-label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.step-connector {
+  width: 32px;
+  height: 2px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+.step-connector-done {
+  background: var(--color-success);
+}
+.step-active .step-number {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-white);
+}
+.step-active .step-label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.step-done .step-number {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: var(--color-white);
+}
+.step-done .step-label {
+  color: var(--color-success);
+}
+
+/* ── Expired / failed action area ──────────────────────── */
+.expired-actions {
+  margin-top: 20px;
+  text-align: center;
+}
+.btn-outline {
+  background: transparent;
+  color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+}
+.btn-outline:hover {
+  background: var(--color-primary);
+  color: var(--color-white);
+}

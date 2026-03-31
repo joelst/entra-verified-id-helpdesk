@@ -1,7 +1,10 @@
 @model CreateVerificationViewModel
 @{
     ViewData["Title"] = "New Verification Request";
+    ViewData["CurrentStep"] = 1;
 }
+
+<partial name="_StepIndicator" />
 
 <div class="card">
     <div class="card-title">New Verification Request</div>
