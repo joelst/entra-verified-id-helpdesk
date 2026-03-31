@@ -60,11 +60,12 @@ public class IndexModel : PageModel
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             TempData["SessionId"] = result!.SessionId;
-            TempData["QrCodeUri"] = result.QrCodeUri;
-            TempData["DeepLink"] = result.DeepLink;
+            TempData["QrCodeUri"] = result.QrCodeUri ?? string.Empty;
+            TempData["DeepLink"] = result.DeepLink ?? string.Empty;
             TempData["ExpiresAt"] = result.ExpiresAt.ToString("O");
+            TempData["ApiBaseUrl"] = _httpClientFactory.CreateClient("ApiClient").BaseAddress?.ToString() ?? string.Empty;
 
-            return RedirectToPage("Present");
+            return RedirectToPage("Present", new { sessionId = result.SessionId });
         }
         catch (Exception ex)
         {

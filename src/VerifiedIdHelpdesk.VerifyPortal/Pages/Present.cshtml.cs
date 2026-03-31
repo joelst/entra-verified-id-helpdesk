@@ -15,12 +15,16 @@ public class PresentModel : PageModel
 
     public PresentModel(IConfiguration config) => _config = config;
 
-    public IActionResult OnGet()
+    public IActionResult OnGet(string? sessionId = null)
     {
-        SessionId = TempData["SessionId"] as string ?? string.Empty;
+        SessionId = sessionId
+                  ?? TempData["SessionId"] as string
+                  ?? string.Empty;
         QrCodeUri = TempData["QrCodeUri"] as string ?? string.Empty;
         DeepLink = TempData["DeepLink"] as string ?? string.Empty;
-        ApiBaseUrl = _config["Api:BaseUrl"] ?? string.Empty;
+        ApiBaseUrl = TempData["ApiBaseUrl"] as string
+                   ?? _config["Api:BaseUrl"]
+                   ?? string.Empty;
 
         var expiresStr = TempData["ExpiresAt"] as string;
         if (expiresStr != null && DateTime.TryParse(expiresStr, out var dt))
