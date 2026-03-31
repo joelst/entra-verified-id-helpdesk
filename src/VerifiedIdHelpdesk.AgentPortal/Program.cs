@@ -73,9 +73,9 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Verification/Error");
-    // SECURITY: HSTS enforces HTTPS for 1 year. Do not change the max-age below 31536000 in production.
     app.UseHsts();
 }
+app.UseStatusCodePagesWithReExecute("/Verification/Error");
 
 // Security headers — applied before any response is written
 app.Use(async (context, next) =>
@@ -85,7 +85,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Referrer-Policy", "strict-origin");
     var apiBaseUrl = app.Configuration["Api:BaseUrl"] ?? "";
     context.Response.Headers.Append("Content-Security-Policy",
-        $"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
+        $"default-src 'self'; script-src 'self'; " +
         $"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
         $"connect-src 'self' {apiBaseUrl} wss://{new Uri(apiBaseUrl).Host};");
     await next();
