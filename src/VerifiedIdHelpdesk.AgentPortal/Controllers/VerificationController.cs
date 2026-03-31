@@ -36,7 +36,29 @@ public class VerificationController : Controller
 
     // GET /Verification/Create
     [HttpGet]
-    public IActionResult Create() => View();
+    public IActionResult Create()
+    {
+        ViewBag.ApiBaseUrl = _config["Api:BaseUrl"] ?? string.Empty;
+        return View();
+    }
+
+    // GET /Verification/PendingSessions — proxy to Api for JS on Create page
+    [HttpGet]
+    [AuthorizeForScopes(ScopeKeySection = "Api:Scopes")]
+    public async Task<IActionResult> PendingSessions()
+    {
+        var client = _httpClientFactory.CreateClient("ApiClient");
+        var accessToken = await GetApiAccessTokenAsync();
+        if (!string.IsNullOrEmpty(accessToken))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.GetAsync("/api/verification/pending-sessions");
+        if (!response.IsSuccessStatusCode)
+            return StatusCode((int)response.StatusCode);
+
+        var content = await response.Content.ReadAsStringAsync();
+        return Content(content, "application/json");
+    }
 
     // POST /Verification/Create
     [HttpPost]

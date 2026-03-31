@@ -203,6 +203,28 @@ public class VerificationController : ControllerBase
         });
     }
 
+    /// <summary>Returns all pending sessions for the authenticated agent.</summary>
+    [HttpGet("pending-sessions")]
+    [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
+    public async Task<IActionResult> PendingSessions()
+    {
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
+
+        var sessions = await _sessions.GetPendingByAgentAsync(agentEntraId);
+        return Ok(sessions.Select(s => new
+        {
+            s.SessionId,
+            s.CallerDisplayName,
+            s.CallerEmail,
+            s.TicketId,
+            s.DeliveryChannel,
+            s.ExpiresAt,
+            s.CreatedAt
+        }));
+    }
+
     [HttpGet("my-sessions")]
     [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
     public async Task<IActionResult> MySessions([FromQuery] int limit = 50)

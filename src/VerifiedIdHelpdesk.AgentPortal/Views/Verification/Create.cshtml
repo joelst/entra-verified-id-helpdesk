@@ -6,6 +6,16 @@
 
 <partial name="_StepIndicator" />
 
+<div id="sessionConfig" data-api-base-url="@ViewBag.ApiBaseUrl" style="display:none;"></div>
+
+<div id="activeSessions" class="active-sessions" style="display:none;">
+    <div class="active-sessions-header">
+        <span class="active-sessions-title">Your Active Verifications</span>
+        <span id="sessionCount" class="badge badge-pending"></span>
+    </div>
+    <div id="sessionCards" class="session-cards"></div>
+</div>
+
 <div class="card">
     <div class="card-title">New Verification Request</div>
     <form asp-action="Create" method="post">
@@ -71,5 +81,6 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/active-sessions.js" asp-append-version="true"></script>
     <script src="~/js/directory-search.js" asp-append-version="true"></script>
 }

@@ -143,21 +143,22 @@ public class CallbackController : ControllerBase
             var oidcConfig = await configManager.GetConfigurationAsync();
 
             var handler = new JwtSecurityTokenHandler();
-            // SECURITY NOTE: Issuer and audience validation are intentionally relaxed for
-            // Entra Verified ID callbacks, which use a service-issued JWT whose issuer/audience
-            // may not match the app registration. The signature IS validated against the tenant's
-            // signing keys, ensuring the token was issued by Microsoft Entra for this tenant.
-            //
-            // CUSTOMIZE: If you know the exact issuer URI and audience for your Verified ID
-            // callbacks, enable these checks for defense-in-depth:
-            //   ValidateIssuer = true,
-            //   ValidIssuer = "https://login.microsoftonline.com/{tenantId}/v2.0",
-            //   ValidateAudience = true,
-            //   ValidAudience = "{your-app-client-id}",
+            // SECURITY: Issuer is validated via a custom delegate because the Verified ID
+            // callback JWT may be issued from either the tenant login endpoint or the
+            // Verified ID service endpoint. Audience is validated against the app's client ID.
+            // Signature is validated against the tenant's signing keys.
             handler.ValidateToken(token, new TokenValidationParameters
             {
-                ValidateIssuer = false,
-                ValidateAudience = false,
+                ValidateIssuer = true,
+                IssuerValidator = (issuer, token, parameters) =>
+                {
+                    if (issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.OrdinalIgnoreCase) ||
+                        issuer.StartsWith("https://verifiedid.did.msidentity.com", StringComparison.OrdinalIgnoreCase))
+                        return issuer;
+                    throw new SecurityTokenInvalidIssuerException($"Invalid issuer: {issuer}");
+                },
+                ValidateAudience = true,
+                ValidAudiences = [_config["AzureAd:ClientId"]!],
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKeys = oidcConfig.SigningKeys,

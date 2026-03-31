@@ -71,6 +71,14 @@ if (!builder.Environment.IsEnvironment("Testing"))
 
 builder.Services.AddControllers();
 
+// SECURITY: Enforce secure cookie defaults
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+});
+
 // Health checks
 builder.Services.AddHealthChecks();
 
@@ -112,9 +120,22 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin");
+    context.Response.Headers.Append("Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Append("X-Permitted-Cross-Domain-Policies", "none");
+    await next();
+});
+
 app.UseCors("AllowPortals");
 app.UseRateLimiter();
 app.UseHttpsRedirection();
+app.UseCookiePolicy();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -26,9 +26,12 @@ public class DirectoryController : ControllerBase
 
         try
         {
+            // SECURITY: Sanitize search input — strip double quotes to prevent Graph search syntax injection.
+            var sanitizedQuery = q.Replace("\"", "");
+
             var users = await _graph.Users.GetAsync(req =>
             {
-                req.QueryParameters.Search = $"\"displayName:{q}\" OR \"mail:{q}\"";
+                req.QueryParameters.Search = $"\"displayName:{sanitizedQuery}\" OR \"mail:{sanitizedQuery}\"";
                 req.QueryParameters.Select = ["id", "displayName", "mail", "department", "jobTitle"];
                 req.QueryParameters.Top = 10;
                 req.QueryParameters.Orderby = ["displayName"];

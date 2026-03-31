@@ -7,63 +7,33 @@
 
 ## Phase 1 — Agent Experience Polish
 
-### 1.1 Session History Page
-**Goal**: Agents can view their past verifications for audit trail and reference.
+### 1.1 Session History Page ✅
+**Status**: Complete.
 
-**What exists**: Sessions are already stored in Azure Table Storage with `AgentEntraId`, `CallerEmail`, `CallerDisplayName`, `TicketId`, `Status`, `CreatedAt`, `VerifiedAt`, `DeliveryChannel`.
+Agents can view their past verifications via a "History" nav link. `ISessionStore.GetByAgentAsync` queries Table Storage by `AgentEntraId`. The API exposes `GET /api/verification/my-sessions` (authorized, reads agent OID from JWT). `History.cshtml` displays caller, email, ticket, channel, status (color-coded badges), and time.
 
-**Plan**:
-- Add `ISessionStore.GetByAgentAsync(string agentEntraId, int limit)` to query Table Storage by `AgentEntraId`
-- Add `GET /api/verification/my-sessions` API endpoint (authorized, reads agent OID from JWT)
-- Create `Views/Verification/History.cshtml` — table with columns: Caller, Email, Ticket, Channel, Status, Time
-- Color-code status badges: 🟢 verified, 🔴 failed/expired, 🟡 pending
-- Add "History" nav link in the AgentPortal header
-- Pagination or "last 50" limit to keep it snappy
+### 1.2 Concurrent Sessions Dashboard ✅
+**Status**: Complete.
 
-**Files to change**:
-- `src/VerifiedIdHelpdesk.Core/Interfaces/ISessionStore.cs`
-- `src/VerifiedIdHelpdesk.Infrastructure/AzureTableSessionStore.cs`
-- `src/VerifiedIdHelpdesk.Api/Controllers/VerificationController.cs`
-- `src/VerifiedIdHelpdesk.AgentPortal/Controllers/VerificationController.cs`
-- New: `src/VerifiedIdHelpdesk.AgentPortal/Views/Verification/History.cshtml`
-- `src/VerifiedIdHelpdesk.AgentPortal/Views/Shared/_Layout.cshtml` (nav link)
+Agents can see all their active pending verifications on the Create page. Session cards show caller name, delivery channel, countdown timer, and link to the Pending page. A badge shows "N/3 active" and the submit button is disabled when at max capacity. `GET /api/verification/pending-sessions` endpoint serves the data, polled every 15 seconds via `active-sessions.js`.
 
-### 1.2 Concurrent Sessions Dashboard
-**Goal**: Agents can manage multiple pending verifications simultaneously.
+### 1.3 Agent UX Improvements ✅
+**Status**: Complete.
 
-**What exists**: `MaxPendingSessionsPerAgent = 3` is enforced. The API already has `CountPendingByAgentAsync`. But the UI only shows one session at a time.
-
-**Plan**:
-- Add `ISessionStore.GetPendingByAgentAsync(string agentEntraId)` to return all pending sessions
-- Add `GET /api/verification/pending-sessions` API endpoint
-- On the Create page, show a sidebar or card strip of active pending sessions
-- Each card: caller name, code (masked?), countdown timer, click to view
-- Badge on the "Send Verification Request" button: "(2/3 active)"
-- When a session completes or expires, remove its card via polling
-
-**Files to change**:
-- `src/VerifiedIdHelpdesk.Core/Interfaces/ISessionStore.cs`
-- `src/VerifiedIdHelpdesk.Infrastructure/AzureTableSessionStore.cs`
-- `src/VerifiedIdHelpdesk.Api/Controllers/VerificationController.cs`
-- `src/VerifiedIdHelpdesk.AgentPortal/Views/Verification/Create.cshtml`
-- New: `src/VerifiedIdHelpdesk.AgentPortal/wwwroot/js/active-sessions.js`
-- `src/VerifiedIdHelpdesk.AgentPortal/wwwroot/css/site.css` (card styles)
+- **Step indicator**: 3-step breadcrumb (Generate Code → Awaiting Verification → Verified) on all views via `_StepIndicator.cshtml` partial
+- **Expired session navigation**: "Start New Verification" button appears when code expires or session fails (both countdown-based and poll-based)
+- **Validation summary fix**: Hidden `validation-summary-valid` div that was always rendering as a red box
+- **Error handler path**: Fixed exception handler from `/Home/Error` (404) to `/Verification/Error`
+- **MSAL re-auth**: `[AuthorizeForScopes]` on `Create` POST and `Result` actions to handle token cache expiry
 
 ---
 
 ## Phase 2 — Notification Channels
 
-### 2.1 Email Delivery Testing & Fixes
-**Goal**: Verify email delivery works end-to-end.
+### 2.1 Email Delivery Testing & Fixes ✅
+**Status**: Complete — verified working with real sender mailbox.
 
-**Prerequisites**:
-- `Notifications:SenderEmail` app setting on the API (a mailbox the app can send from)
-- `Mail.Send` permission on the API managed identity (already granted)
-
-**Plan**:
-- Test with a real sender mailbox
-- Verify the email template renders correctly (HTML in `GraphNotificationService.SendEmailAsync`)
-- Add error handling: if email fails, return an actionable error to the agent
+**Remaining polish**:
 - Consider adding a "Resend" button on the Pending page
 
 ### 2.2 Teams Delivery Testing & Fixes
@@ -82,58 +52,72 @@
 
 ## Phase 3 — Security Hardening
 
-### 3.1 OBO Token Flow End-to-End
-**Goal**: The AgentPortal authenticates to the API using bearer tokens, not anonymous calls.
+### 3.1 OBO Token Flow End-to-End ✅
+**Status**: Complete.
 
-**What exists**: `ITokenAcquisition` is injected, `GetApiAccessTokenAsync()` acquires tokens when `Api:Scopes` is configured. The API validates JWTs via `AddMicrosoftIdentityWebApi`.
+The AgentPortal authenticates to the API using bearer tokens via the On-Behalf-Of flow. `[AuthorizeForScopes]` is applied to AgentPortal controller actions. `ITokenAcquisition` acquires tokens using `Api:Scopes`, and the `ApiClient` `HttpClient` forwards bearer tokens on every request. The API validates JWTs via `AddMicrosoftIdentityWebApi`.
 
-**Plan**:
-- Verify `Api:Scopes` app setting has the real client ID (not placeholder)
-- Verify the app registration has `identifierUris` set and `access_as_agent` scope exposed
-- Test that `/api/verification/generate` receives and validates the bearer token
-- Move agent identity extraction from JWT claims (OBO provides the actual user's identity)
-- Remove the `[AllowAnonymous]`-like behavior on generate endpoint
+### 3.2 Verified ID Callback JWT Validation ✅
+**Status**: Complete.
 
-### 3.2 Verified ID Callback JWT Validation
-**Goal**: Properly validate the callback JWT from the Verified ID service.
+The callback JWT from the Verified ID service is now fully validated:
+- **Issuer**: Custom validator accepting both `login.microsoftonline.com` and `verifiedid.did.msidentity.com`
+- **Audience**: Validated against the app client ID from configuration
+- **Signature**: Validated against tenant signing keys
+- **Lifetime**: Validated with a 5-minute clock skew tolerance
 
-**Current state**: JWT validation logs a warning and continues (DID-based ES256 keys don't match standard Entra OIDC keys).
+State-based session correlation remains as defense-in-depth alongside JWT validation.
 
-**Plan**:
-- Research the correct JWKS endpoint for Verified ID callbacks (DID resolution)
-- The `kid` is a `did:jwk:...` — the public key is embedded in the DID itself
-- Parse the DID JWK from the `kid`, extract the EC public key, validate signature
-- Add this as defense-in-depth alongside state-based session correlation
+### 3.3 Rate Limiting ✅
+**Status**: Complete.
 
-### 3.3 Rate Limiting
-**Goal**: Protect public endpoints from abuse.
-
-**Plan**:
-- Add ASP.NET Core rate limiting middleware (`Microsoft.AspNetCore.RateLimiting`)
+ASP.NET Core rate limiting middleware protects public endpoints:
 - `/api/verification/initiate` — 10 requests/minute per IP
 - `/api/verification/public-status` — 60 requests/minute per IP
-- `/api/verification/callback` — 30 requests/minute per IP (from Verified ID service)
+- `/api/verification/callback` — 30 requests/minute per IP
+
+Session-level limits are also enforced: max 5 failed code attempts per session, max 3 concurrent pending sessions per agent.
+
+### 3.4 Security Headers Standardization ✅
+**Status**: Complete.
+
+Security headers applied to all three apps via middleware:
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+- `X-Permitted-Cross-Domain-Policies: none`
+- Content Security Policy on both portals (restrictive, no inline scripts)
+
+### 3.5 Input Sanitization ✅
+**Status**: Complete.
+
+Graph search syntax injection fixed in AgentPortal `DirectoryController` — double quotes are stripped from user input before Graph API calls. Both AgentPortal and Api controllers sanitize input consistently.
+
+### 3.6 Remaining Security Items
+**Goal**: Address outstanding security hardening work.
+
+**Completed**:
+- ✅ **Cookie Hardening**: `HttpOnly=Always`, `Secure=Always`, `SameSite=Lax` (AgentPortal, for OIDC) / `Strict` (VerifyPortal, Api) configured via `CookiePolicyOptions`
+- ✅ **Dependency Scanning**: Dependabot config (`.github/dependabot.yml`) scans NuGet + GitHub Actions weekly. PR dependency review workflow (`.github/workflows/dependency-review.yml`) checks for high-severity vulnerabilities and runs `dotnet list package --vulnerable`
+
+**Remaining**:
+- **Bundle CDN Dependencies**: VerifyPortal still loads scripts from `cdn.jsdelivr.net` — bundle locally to remove external dependency and tighten CSP
+- **Distributed Token Cache**: Replace in-memory token cache with a distributed cache (relates to Phase 4.3)
 
 ---
 
 ## Phase 4 — Production Readiness
 
-### 4.1 Bundle SignalR Locally
-**Goal**: Remove CDN dependency for the SignalR JS client.
+### 4.1 Bundle SignalR Locally ✅
+**Status**: Complete.
 
-**Plan**:
-- `npm install @microsoft/signalr`
-- Copy `signalr.min.js` to `wwwroot/lib/signalr/`
-- Update `Pending.cshtml` script reference
-- Remove `cdn.jsdelivr.net` from CSP `script-src`
+SignalR JS client bundled locally in `wwwroot/lib/signalr/`. `Pending.cshtml` updated to reference local file. CDN dependency on `cdn.jsdelivr.net` removed from CSP `script-src`. Custom 404 handler also added.
 
-### 4.2 Health Check Endpoints
-**Goal**: Enable Azure App Service health probes.
+### 4.2 Health Check Endpoints ✅
+**Status**: Complete.
 
-**Plan**:
-- Add `/health` endpoint to each app (basic liveness)
-- Add `/ready` to the API (checks Table Storage + Key Vault connectivity)
-- Configure App Service health check paths in Bicep
+`/health` endpoint added to all three apps (basic liveness). `/ready` endpoint on the API checks Table Storage and Key Vault connectivity. App Service health check paths configured in Bicep.
 
 ### 4.3 Distributed Token Cache
 **Goal**: Replace in-memory token cache so tokens survive app restarts.
@@ -143,34 +127,46 @@
 - Configure MIWA to use `AddDistributedTokenCaches()` instead of `AddInMemoryTokenCaches()`
 - This prevents the `user_null` error pattern if we ever switch back to delegated auth
 
-### 4.4 Custom Error Pages
-**Goal**: Friendly error pages instead of developer exception page in production.
+### 4.4 Custom Error Pages ✅
+**Status**: Complete.
 
-**Plan**:
-- Create styled 404 and 500 error pages for both portals
-- Ensure no internal details leak in production error responses
+Styled error pages for both portals. Exception handler path corrected to `/Verification/Error` with `[AllowAnonymous]` action. 404 handler added. No internal details leak in production error responses.
 
 ---
 
 ## Implementation Order (Recommended)
 
-| Priority | Item | Effort | Dependencies |
-|----------|------|--------|-------------|
-| 1 | Session History (1.1) | Medium | None |
-| 2 | Email Testing (2.1) | Small | Sender mailbox configured |
-| 3 | Teams Testing (2.2) | Small | Sender user ID configured |
-| 4 | OBO Token Verification (3.1) | Medium | App registration scope setup |
-| 5 | Concurrent Sessions (1.2) | Medium | Session History (reuses store methods) |
-| 6 | Rate Limiting (3.3) | Small | None |
-| 7 | Bundle SignalR (4.1) | Small | None |
-| 8 | Health Checks (4.2) | Small | None |
-| 9 | Callback JWT Validation (3.2) | Large | DID resolution research |
-| 10 | Distributed Cache (4.3) | Medium | Redis or storage decision |
-| 11 | Error Pages (4.4) | Small | None |
+| Priority | Item | Effort | Status |
+|----------|------|--------|--------|
+| 1 | Session History (1.1) | Medium | ✅ Done |
+| 2 | Agent UX Improvements (1.3) | Medium | ✅ Done |
+| 3 | Concurrent Sessions (1.2) | Medium | ✅ Done |
+| 4 | OBO Token Verification (3.1) | Medium | ✅ Done |
+| 5 | Rate Limiting (3.3) | Small | ✅ Done |
+| 6 | Callback JWT Validation (3.2) | Large | ✅ Done |
+| 7 | Security Headers (3.4) | Small | ✅ Done |
+| 8 | Input Sanitization (3.5) | Small | ✅ Done |
+| 9 | Cookie Hardening (3.6) | Small | ✅ Done |
+| 10 | Dependency Scanning (3.6) | Small | ✅ Done |
+| 11 | Bundle SignalR (4.1) | Small | ✅ Done |
+| 12 | Health Checks (4.2) | Small | ✅ Done |
+| 13 | Error Pages (4.4) | Small | ✅ Done |
+| 14 | Email Testing (2.1) | Small | ✅ Done |
+| 15 | Teams Testing (2.2) | Small | Pending — needs sender user ID config |
+| 16 | Bundle VerifyPortal CDN (3.6) | Small | Pending |
+| 17 | Distributed Cache (4.3) | Medium | Pending — needs Redis/storage decision |
 
 ---
 
-## What We Built Tonight (for context)
+## Bug Fixes (this session)
+
+- Verified ID API URL: removed tenant ID from URL path (API uses bearer token for tenant)
+- Session expiry: fixed `DateTimeOffset` vs string comparison in Azure Table Storage filter
+- Verified ID API error logging: full URL and response body now logged on failure
+
+---
+
+## What We Built (Night 1 — for context)
 
 Starting from a `TypeLoadException` at deploy time, we fixed:
 - NuGet package incompatibility (MicrosoftGraph → GraphServiceClient)
