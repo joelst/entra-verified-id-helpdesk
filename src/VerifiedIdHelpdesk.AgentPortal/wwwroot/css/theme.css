@@ -60,7 +60,7 @@ body {
   gap: 16px;
   width: 100%;
 }
-.logo { height: 32px; width: auto; }
+.logo { height: 32px; width: auto; overflow: hidden; }
 .app-title { color: #AABBCC; font-size: var(--font-size-lg); font-weight: 400; }
 .agent-name { margin-left: auto; color: var(--color-white); font-size: var(--font-size-sm); }
 .header-nav { display: flex; gap: 4px; margin-left: 24px; }

@@ -45,7 +45,7 @@ public class GraphNotificationService : INotificationService
             ?? throw new InvalidOperationException("Notifications:SenderEmail is not configured.");
 
         var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
-            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is not configured.");
+            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is required for email notifications but is not configured.");
 
         var expiryText = expiresAt.ToString("HH:mm UTC");
         var body = $@"
@@ -53,7 +53,7 @@ public class GraphNotificationService : INotificationService
 <p><strong>Your one-time verification code is:</strong></p>
 <h2 style='font-family:Courier New,monospace;letter-spacing:4px;'>{displayCode}</h2>
 <p>This code expires at <strong>{expiryText}</strong>.</p>
-<p>To verify your identity, visit <a href='{verifyPortalUrl}'>{verifyPortalUrl}</a>, 
+<p>To verify your identity, visit <a href='{verifyPortalUrl}'>{verifyPortalUrl}</a>,
 enter your email address and the code above, then approve the request in Microsoft Authenticator.</p>
 <p><em>If you did not contact the helpdesk, please ignore this message.</em></p>";
 
@@ -79,7 +79,7 @@ enter your email address and the code above, then approve the request in Microso
             ?? throw new InvalidOperationException("Notifications:SenderUserId is not configured.");
 
         var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
-            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is not configured.");
+            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is required for Teams notifications.");
         var expiryText = expiresAt.ToString("HH:mm UTC");
 
         // Resolve recipient UPN → user ID

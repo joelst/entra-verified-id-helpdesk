@@ -10,7 +10,7 @@ document.getElementById('callerSearch').addEventListener('input', function () {
         hideResults();
         return;
     }
-    searchTimeout = setTimeout(() => searchDirectory(query), 500);
+    searchTimeout = setTimeout(() => searchDirectory(query), 350);
 });
 
 async function searchDirectory(query) {

@@ -86,15 +86,18 @@ builder.Services.AddHealthChecks();
 
 // OpenAPI / Swagger — Development only (see middleware below)
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+if (builder.Environment.IsDevelopment())
 {
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+    builder.Services.AddSwaggerGen(options =>
     {
-        Title = "Verified ID Helpdesk API",
-        Version = "v1",
-        Description = "Backend API for the Entra Verified ID Helpdesk"
+        options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+        {
+            Title = "Verified ID Helpdesk API",
+            Version = "v1",
+            Description = "Backend API for the Entra Verified ID Helpdesk"
+        });
     });
-});
+}
 
 // Rate limiting — protect public endpoints from abuse
 builder.Services.AddRateLimiter(options =>
