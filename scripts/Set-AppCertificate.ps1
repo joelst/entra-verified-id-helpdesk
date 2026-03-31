@@ -261,12 +261,7 @@ if (-not $SkipLocalDevCert -and $LocalDevCertPath) {
         }
 
         if (-not $secretsSet) {
-            Write-Output ''
-            Write-Output '-- Local dev: run these from the repo root -------------------'
-            foreach ($proj in $localDevProjects) {
-                Write-Output "  dotnet user-secrets --project $proj set `"AzureAd:ClientCertificates:0:SourceType`" `"Path`""
-                Write-Output "  dotnet user-secrets --project $proj set `"AzureAd:ClientCertificates:0:CertificateDiskPath`" `"$LocalDevCertPath`""
-            }
+            Write-Information '  Project directories not found — skipping user-secrets (not needed for Azure deployment).'
         }
     }
 }
