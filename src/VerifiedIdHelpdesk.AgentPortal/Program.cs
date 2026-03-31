@@ -72,7 +72,7 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
+    app.UseExceptionHandler("/Verification/Error");
     // SECURITY: HSTS enforces HTTPS for 1 year. Do not change the max-age below 31536000 in production.
     app.UseHsts();
 }

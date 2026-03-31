@@ -63,6 +63,9 @@
   color: var(--color-success);
 }
 
+/* ── Hide validation summary when no errors ────────────── */
+.validation-summary-valid { display: none; }
+
 /* ── Expired / failed action area ──────────────────────── */
 .expired-actions {
   margin-top: 20px;
