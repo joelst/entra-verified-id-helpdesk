@@ -65,7 +65,7 @@ public class VerificationController : ControllerBase
         {
             SessionId = Guid.NewGuid().ToString(),
             CodeHash = codeHash,
-            CallerEmail = request.CallerEmail,
+            CallerEmail = request.CallerEmail.Trim().ToLowerInvariant(),
             CallerEntraId = request.CallerEntraId,
             CallerDisplayName = request.CallerDisplayName ?? string.Empty,
             TicketId = request.TicketId ?? string.Empty,
@@ -81,7 +81,12 @@ public class VerificationController : ControllerBase
         await _sessions.CreateAsync(session);
 
         var displayCode = CodeGenerator.FormatForDisplay(code);
-        await _notifications.SendCodeAsync(request.CallerEmail, displayCode, session.ExpiresAt, session.DeliveryChannel);
+
+        // Skip sending notification for verbal delivery — agent reads the code to the caller directly
+        if (session.DeliveryChannel != Constants.ChannelVerbal)
+        {
+            await _notifications.SendCodeAsync(request.CallerEmail, displayCode, session.ExpiresAt, session.DeliveryChannel);
+        }
 
         _logger.LogInformation("code_generated {@Event}", new
         {

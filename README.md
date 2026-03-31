@@ -1,8 +1,24 @@
-# Entra Verified ID Helpdesk
+# Entra Verified ID Helpdesk Sample App
 
 [![Build](https://github.com/joelst/entra-verified-id-helpdesk/actions/workflows/build.yml/badge.svg)](https://github.com/joelst/entra-verified-id-helpdesk/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+<a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2FcreateUiDefinition.json" target="_blank" rel="noopener noreferrer"><img src="https://aka.ms/deploytoazurebutton"/></a>
+
+> [!IMPORTANT]
+> **This is a sample / demo application.** It is provided as-is, without warranty or support of any kind, by the author or Microsoft. It has not been reviewed or certified for production use. If you deploy this in a production environment, you are responsible for having the code reviewed by qualified developers and security experts, adding appropriate network controls (such as Azure Application Gateway, Web Application Firewall, and private endpoints), and ensuring it meets your organization's security, compliance, and operational requirements. Use at your own risk.
 
 A .NET 10 sample showing how a helpdesk team can verify caller identity using [Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/decentralized-identifier-overview). When an employee calls the helpdesk, an agent generates an 8-character one-time code and sends it by email or Microsoft Teams. The caller opens a public web page, enters their email and the code, then approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity — name, employee ID, department — appear in real time via SignalR, without ever asking the caller a security question.
+
+## Contents
+
+| Setup | Reference |
+|-------|-----------|
+| [Prerequisites](#prerequisites) | [Configuration Reference](#configuration-reference) |
+| [Entra Verified ID Setup](#entra-verified-id-setup) | [Security Model](#security-model) |
+| [Quick Start: Local Development](#quick-start-local-development) | [Customization Guide](#customization-guide) |
+| [Quick Start: Deploy to Azure](#quick-start-deploy-to-azure) | [Project Structure](#project-structure) |
+| [Entra App Registration](#entra-app-registration-setup) | [Contributing](#contributing) |
 
 ## Architecture
 
@@ -70,14 +86,27 @@ flowchart TD
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- An Azure subscription with [Microsoft Entra Verified ID configured](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-configure-tenant)
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (`az login` before running locally)
-- An Entra app registration with the permissions listed in [App Registration Setup](#entra-app-registration-setup)
-- An Entra security group whose members are your helpdesk agents (note the group **Object ID**)
-- (Optional for local dev) A dev Azure Table Storage account and Key Vault
+Before you start, make sure you have the following in place:
 
-## Quick Start (Local Development)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) — run `az login` before any of the steps below
+- An Azure subscription
+- **Microsoft Entra Verified ID** configured for your tenant — follow [Set up a tenant for Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-configure-tenant) if you have not done this yet
+- An Entra **security group** whose members are your helpdesk agents — note the group **Object ID**
+
+## Entra Verified ID Setup
+
+This sample requires a configured Entra Verified ID tenant with an **employee credential type** defined. If you have not set this up yet, follow:
+
+1. [Set up a tenant for Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-configure-tenant)
+2. [Configure a custom credential](https://learn.microsoft.com/en-us/entra/verified-id/how-to-customize-credentials)
+3. Set `VerifiedId:DidAuthority` to your DID (e.g., `did:web:yourdomain.com`) and `VerifiedId:CredentialType` to the name of your credential type
+
+> **Local testing tip:** Use a separate dev credential type so test presentations do not appear in production audit logs.
+
+## Quick Start: Local Development
+
+If you plan on working with this sample locally, follow these steps.
 
 ### 1. Clone the repository
 
@@ -86,47 +115,94 @@ git clone https://github.com/joelst/entra-verified-id-helpdesk.git
 cd entra-verified-id-helpdesk
 ```
 
-### 2. Create a dev Key Vault and set secrets
+### 2. Create a dev Key Vault
 
-```bash
-# Create a resource group and Key Vault for local dev
+The app registration script needs a Key Vault to exist before it can create the certificate. Create one now:
+
+```powershell
+# PowerShell — create resource group, Key Vault, and grant yourself access
 az group create --name rg-vidhelp-dev --location eastus
-az keyvault create --name kv-vidhelp-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
+az keyvault create --name kv-verified-id-app-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
 
-# Grant yourself Key Vault Secrets Officer so you can set values
-az role assignment create \
-  --role "Key Vault Secrets Officer" \
-  --assignee "$(az ad signed-in-user show --query id -o tsv)" \
-  --scope "$(az keyvault show --name kv-vidhelp-dev --query id -o tsv)"
-
-# Set required secrets
-az keyvault secret set --vault-name kv-vidhelp-dev --name EntraClientSecret --value "<your-app-client-secret>"
-az keyvault secret set --vault-name kv-vidhelp-dev --name HmacKey --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
+$myId    = az ad signed-in-user show --query id -o tsv
+$kvScope = az keyvault show --name kv-verified-id-app-dev --query id -o tsv
+az role assignment create --role "Key Vault Secrets Officer"      --assignee $myId --scope $kvScope
+az role assignment create --role "Key Vault Certificates Officer" --assignee $myId --scope $kvScope
 ```
-
-### 3. Create an app registration
-
-See [Entra App Registration Setup](#entra-app-registration-setup) below.
-
-### 4. Configure appsettings
-
-Copy `appsettings.json` values into `appsettings.Development.json` for each project and fill in the real values — or set them as user secrets:
 
 ```bash
-# From the repo root
-dotnet user-secrets set "KeyVault:Uri" "https://kv-vidhelp-dev.vault.azure.net/" \
-  --project src/VerifiedIdHelpdesk.Api
+# bash / macOS
+az group create --name rg-vidhelp-dev --location eastus
+az keyvault create --name kv-verified-id-app-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
 
-dotnet user-secrets set "KeyVault:Uri" "https://kv-vidhelp-dev.vault.azure.net/" \
-  --project src/VerifiedIdHelpdesk.AgentPortal
-
-dotnet user-secrets set "KeyVault:Uri" "https://kv-vidhelp-dev.vault.azure.net/" \
-  --project src/VerifiedIdHelpdesk.VerifyPortal
+MY_ID="$(az ad signed-in-user show --query id -o tsv)"
+KV_SCOPE="$(az keyvault show --name kv-verified-id-app-dev --query id -o tsv)"
+az role assignment create --role "Key Vault Secrets Officer"      --assignee "$MY_ID" --scope "$KV_SCOPE"
+az role assignment create --role "Key Vault Certificates Officer" --assignee "$MY_ID" --scope "$KV_SCOPE"
 ```
 
-> **Important:** The `DefaultAzureCredential` used to read Key Vault picks up your `az login` credentials automatically in local development. No additional environment variables are needed.
+> **Portal alternative:** In the [Azure Portal](https://portal.azure.com), search for **Key Vaults** → **+ Create**. Enable **Azure role-based access control (RBAC)** on the *Access configuration* tab. After creation, go to **Access Control (IAM)** → **Add role assignment** and grant yourself both **Key Vault Secrets Officer** and **Key Vault Certificates Officer**.
 
-### 5. Run all three apps
+> **Note:** RBAC role assignments can take 1–2 minutes to propagate. If the next step fails with a permissions error, wait a moment and retry.
+
+### 3. Create the Entra app registration
+
+The quickest path is the automated PowerShell script — it creates the certificate in Key Vault, registers it with the app, and configures your local dev environment in one step. See [Entra App Registration Setup](#entra-app-registration-setup) for manual steps and advanced options.
+
+```powershell
+.\scripts\New-AppRegistration.ps1 -KeyVaultName kv-verified-id-app-dev
+```
+
+The script:
+- Creates an app registration and service principal
+- Creates an RSA certificate in Key Vault
+- Uploads the certificate public key to the app registration
+- Exports the certificate (with private key) as a `.pem` file to `~/.entra-vidhelp/EntraClientCert.pem`
+- Runs `dotnet user-secrets` on both `Api` and `AgentPortal` projects so local dev uses the file directly (no live Key Vault connection required on startup)
+
+> **Security note:** The exported `.pem` file contains the private key. Keep it secure and never commit it to source control.
+
+At the end you will have:
+
+- **Application (client) ID** — used in `appsettings.json` / App Service settings
+- **Directory (tenant) ID** — used in `appsettings.json` / App Service settings
+- **Certificate** — created and stored in Key Vault as `EntraClientCert`; local copy at `~/.entra-vidhelp/EntraClientCert.pem`
+
+### 4. Store the HMAC key in Key Vault
+
+```powershell
+# Generate and store a random HMAC key (PowerShell — no Python required)
+$hmacKey = [Convert]::ToBase64String(
+    [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+az keyvault secret set --vault-name kv-verified-id-app-dev --name HmacKey --value $hmacKey
+```
+
+```bash
+# bash / macOS alternative
+az keyvault secret set --vault-name kv-verified-id-app-dev --name HmacKey \
+  --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
+```
+
+### 5. Configure appsettings
+
+Point each project at your Key Vault using .NET user secrets:
+
+```
+# Works on Windows, Mac, and Linux — run from the repo root
+dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.Api
+dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.AgentPortal
+dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.VerifyPortal
+```
+
+Then open `appsettings.json` (or `appsettings.Development.json`) in each project and fill in the values from your app registration and Verified ID setup. See the [Configuration Reference](#configuration-reference) table for a full list of keys.
+
+> **Note:** `DefaultAzureCredential` automatically picks up your `az login` session in local development. No additional environment variables are required.
+
+### 6. (Optional) Expose a tunnel for Verified ID callbacks
+
+Entra Verified ID needs to reach your local API to deliver presentation results. Use a tunneling tool such as [dev tunnels](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/overview) or ngrok to create a public HTTPS URL, then update `Api:BaseUrl` in your configuration with that URL.
+
+### 7. Run all three apps
 
 Open three terminal windows:
 
@@ -141,49 +217,402 @@ dotnet run --project src/VerifiedIdHelpdesk.AgentPortal
 dotnet run --project src/VerifiedIdHelpdesk.VerifyPortal
 ```
 
-Then navigate to the URLs shown in each terminal's output.
+Navigate to the URLs shown in each terminal's output.
 
-> **Tip:** For Entra Verified ID to call back to your local API, expose it with a tunneling tool such as [dev tunnels](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/overview) or ngrok, and update `VerifyPortal:BaseUrl` + the callback URL accordingly.
+## Quick Start: Deploy to Azure
 
-## Configuration Reference
+### Option A: One-click via the Azure Portal
 
-All non-secret values live in `appsettings.json` (or `appsettings.Development.json` for local overrides). Secrets are read from Key Vault at startup.
+The **Deploy to Azure** badge at the top of this page opens the Azure Portal deployment wizard. The wizard is a 4-step guided form.
 
-### appsettings.json keys
+**Recommended order:**
 
-| Key | Description |
-|-----|-------------|
-| `AzureAd:Instance` | Always `https://login.microsoftonline.com/` |
-| `AzureAd:TenantId` | Your Entra tenant ID (GUID) |
-| `AzureAd:ClientId` | App registration client ID (GUID) |
-| `AzureAd:CallbackPath` | OIDC redirect path — leave as `/signin-oidc` |
-| `KeyVault:Uri` | Full URI of your Key Vault, e.g. `https://kv-my-vault.vault.azure.net/` |
-| `VerifiedId:TenantId` | Entra tenant ID — same as `AzureAd:TenantId` |
-| `VerifiedId:ClientId` | App registration client ID — same as `AzureAd:ClientId` |
-| `VerifiedId:DidAuthority` | Your DID, e.g. `did:web:yourdomain.com` |
-| `VerifiedId:CredentialType` | Verifiable credential type name, e.g. `EmployeeVerifiedCredential` |
-| `VerifiedId:RequestServiceBaseUrl` | Always `https://verifiedid.did.msidentity.com/v1.0/` |
-| `Storage:AccountUri` | Azure Table Storage endpoint, e.g. `https://stmystorage.table.core.windows.net/` |
-| `AuthorizationGroups:HelpDeskAgents` | Object ID of the Entra security group for helpdesk agents |
-| `AgentPortal:BaseUrl` | Public base URL of the Agent Portal, e.g. `https://agents.yourdomain.com` |
-| `VerifyPortal:BaseUrl` | Public base URL of the Verify Portal, e.g. `https://verify.yourdomain.com` |
-| `Api:BaseUrl` | Public base URL of the Backend API, e.g. `https://api.yourdomain.com` |
-| `Notifications:SenderEmail` | UPN of the mailbox used to send email notifications |
-| `Notifications:SenderUserId` | Object ID of the sender's Entra user account |
-| `ApplicationInsights:ConnectionString` | App Insights connection string (non-secret) |
+| Step | What you do | Requires |
+|------|-------------|----------|
+| 1 | Run `New-AppRegistration.ps1 -SkipCert` | Azure CLI, Entra Global/App Admin |
+| 2 | Deploy infrastructure via portal (enter `clientId` from step 1) | Azure portal access |
+| 3 | Run `Set-AppCertificate.ps1` | Azure CLI, KV just deployed |
+| 4 | Run `Grant-ManagedIdentityPermissions.ps1` | Azure CLI, Global/Priv. Role Admin |
+| 5 | Store the HMAC key | Azure CLI |
 
-### Key Vault secrets
+#### Step 1: Create the Entra app registration
 
-| Secret name | Value |
-|-------------|-------|
-| `EntraClientSecret` | App registration client secret. **For production, use a certificate instead** — see [Microsoft docs](https://learn.microsoft.com/en-us/entra/identity-platform/certificate-credentials). |
-| `HmacKey` | 32-byte cryptographically random value, base64-encoded. Generate with: `python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())'` |
+Run this **before** deploying infrastructure so you have the `clientId` ready for the portal wizard. The `-SkipCert` flag skips Key Vault (which doesn't exist yet):
+
+```powershell
+$suffix = "helpdesk-prod"   # pick your deployment suffix
+.\scripts\New-AppRegistration.ps1 `
+    -AgentPortalUrl "https://app-agents-$suffix.azurewebsites.net" `
+    -SkipCert
+```
+
+The script prints your **Tenant ID** and **Application (client) ID** — copy them for step 2.
+
+> [!NOTE]
+> The `-AgentPortalUrl` parameter sets the OIDC redirect URI on the app registration. Only the **Agent Portal** uses OIDC — the API uses JWT bearer tokens and the Verify Portal has no authentication. If you later add a custom domain to the Agent Portal, add the redirect URI manually in Entra admin center → App registrations → your app → **Authentication**.
+
+#### Step 2: Deploy the infrastructure
+
+1. Click the **Deploy to Azure** badge at the top of this page (or <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2FcreateUiDefinition.json" target="_blank" rel="noopener noreferrer">use this direct link</a>)
+
+2. **Basics tab** — select your subscription, resource group, and region. Enter the same suffix you used in step 1 (e.g. `helpdesk-prod`). The Key Vault will be named `kv-<suffix>`.
+
+3. **Infrastructure tab** — choose the App Service plan SKU, storage redundancy, and the IP range that may reach the Agent Portal (your corporate egress IP). Defaults are suitable for dev/test.
+
+> [!NOTE]
+> If the deployment fails with a quota error (e.g. `SubscriptionIsOverQuotaForSku`), your subscription may not have capacity for the selected SKU in that region. Try a different region, choose a different SKU tier, or request a quota increase. The new [App Service self-service quota experience](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-the-public-preview-of-the-new-app-service-quota-self-service-experien/4450415) lets you request increases directly from the portal without opening a support ticket.
+
+4. **Entra App Registration tab** — enter the **Client ID** and **Tenant ID** from step 1. Enter the Object ID of the Entra group whose members are allowed to use the Agent Portal. (Both fields can be left blank and updated later if needed.)
+
+5. **Verified ID tab** — enter your credential type name and DID authority (from your Entra Verified ID setup).
+
+6. **Notifications tab** — enter the sender email address and Graph Object ID of the user account that sends Teams/email notifications.
+
+7. Click **Review + create**, then **Create** and wait for the deployment to complete.
+
+The deployment provisions all Azure resources (App Service plan, 3 App Services, **Key Vault**, Storage Account, Application Insights), assigns all Managed Identity RBAC roles, configures all non-secret app settings, and **automatically pulls and builds the application code from this GitHub repository using Oryx** — no separate code deployment step is needed.
+
+#### Step 3: Add the certificate to Key Vault
+
+Now that the Key Vault exists, create the certificate and register it with the app registration:
+
+```powershell
+$suffix   = "helpdesk-prod"
+$clientId = "<client-id from step 1>"
+
+.\scripts\Set-AppCertificate.ps1 `
+    -KeyVaultName "kv-$suffix" `
+    -AppId $clientId
+```
+
+The script creates a self-signed certificate inside Key Vault (private key never leaves KV), registers the public key with the app registration, and optionally exports a PEM file for local development.
+
+#### Step 4: Grant Graph permissions to managed identities
+
+The app registration only has Verified ID permissions. Graph permissions are granted directly to the App Service managed identities (least-privilege):
+
+```powershell
+.\scripts\Grant-ManagedIdentityPermissions.ps1 `
+    -ResourceGroupName "<your-resource-group>" `
+    -Suffix "$suffix"
+```
+
+This grants:
+- **AgentPortal**: `User.Read.All`, `GroupMember.Read.All` (directory search, group membership checks)
+- **API**: `User.Read.All`, `Mail.Send`, `Chat.Create`, `Chat.ReadWrite.All` (notifications)
+
+#### Step 5: Store the HMAC key
+
+Generate and store the HMAC key (used to sign one-time codes):
+
+```powershell
+# PowerShell (no Python required)
+$hmacKey = [Convert]::ToBase64String(
+    [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+az keyvault secret set --vault-name "kv-<suffix>" --name HmacKey --value $hmacKey
+```
+
+```bash
+# bash / macOS alternative
+az keyvault secret set --vault-name "kv-<suffix>" --name HmacKey \
+  --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
+```
+
+#### Step 6: Application code
+
+**No action required.** The infrastructure deployment in Step 2 automatically pulls the latest code from the `main` branch of this repository and builds it using [Oryx](https://github.com/microsoft/Oryx). All three App Services (API, Agent Portal, Verify Portal) are built and started automatically.
+
+> [!NOTE]
+> The first build takes a few minutes after the deployment completes. If the apps return a startup error initially, wait 2–3 minutes and refresh. You can monitor progress in the Azure Portal under each App Service → **Deployment Center → Logs**.
+
+**To re-deploy after a code change** (e.g. after updating configuration), go to the Azure Portal → App Service → **Deployment Center → Sync**, or re-run the deployment using the **Redeploy** button. Alternatively, run the following CLI commands:
+
+```powershell
+# PowerShell — trigger a re-deploy (Oryx re-pulls and rebuilds from GitHub)
+$suffix = "helpdesk-prod"
+$rg     = "rg-<your-resource-group>"
+
+az webapp deployment source sync -g $rg -n "app-api-$suffix"
+az webapp deployment source sync -g $rg -n "app-agents-$suffix"
+az webapp deployment source sync -g $rg -n "app-verify-$suffix"
+```
+
+<details>
+<summary>Manual deploy fallback (if Oryx is not working)</summary>
+
+If you need to deploy manually instead of relying on Oryx, build and push each app:
+
+```powershell
+# PowerShell
+$suffix = "helpdesk-prod"
+$rg     = "rg-<your-resource-group>"
+
+dotnet publish src/VerifiedIdHelpdesk.Api         -c Release -o ./publish/api
+dotnet publish src/VerifiedIdHelpdesk.AgentPortal  -c Release -o ./publish/agents
+dotnet publish src/VerifiedIdHelpdesk.VerifyPortal -c Release -o ./publish/verify
+
+az webapp deploy -g $rg -n "app-api-$suffix"     --src-path ./publish/api
+az webapp deploy -g $rg -n "app-agents-$suffix"  --src-path ./publish/agents
+az webapp deploy -g $rg -n "app-verify-$suffix"  --src-path ./publish/verify
+```
+
+```bash
+# bash / macOS
+SUFFIX="helpdesk-prod"
+RG="rg-<your-resource-group>"
+
+dotnet publish src/VerifiedIdHelpdesk.Api         -c Release -o ./publish/api
+dotnet publish src/VerifiedIdHelpdesk.AgentPortal  -c Release -o ./publish/agents
+dotnet publish src/VerifiedIdHelpdesk.VerifyPortal -c Release -o ./publish/verify
+
+az webapp deploy -g "$RG" -n "app-api-${SUFFIX}"     --src-path ./publish/api
+az webapp deploy -g "$RG" -n "app-agents-${SUFFIX}"  --src-path ./publish/agents
+az webapp deploy -g "$RG" -n "app-verify-${SUFFIX}"  --src-path ./publish/verify
+```
+
+</details>
+
+
+---
+
+### Option B: Azure CLI
+
+**Recommended order:**
+
+| Step | What you do |
+|------|-------------|
+| 1 | Create Entra app registration (`-SkipCert`) |
+| 2 | Deploy infrastructure (Bicep) with `clientId` from step 1 |
+| 3 | Add certificate to Key Vault (`Set-AppCertificate.ps1`) |
+| 4 | Grant Graph permissions to managed identities |
+| 5 | Store the HMAC key |
+
+#### Step 1: Create the Entra app registration
+
+Run this **before** deploying infrastructure so you have the `clientId` ready for the Bicep parameters. `-SkipCert` skips Key Vault (which doesn't exist yet):
+
+```powershell
+$suffix = "helpdesk-prod"   # pick your deployment suffix
+.\scripts\New-AppRegistration.ps1 `
+    -AgentPortalUrl "https://app-agents-$suffix.azurewebsites.net" `
+    -SkipCert
+```
+
+Note the **Tenant ID** and **Application (client) ID** printed by the script.
+
+> [!NOTE]
+> If you later add a **custom domain** to the Agent Portal, add the custom domain redirect URI to the app registration: Entra admin center → App registrations → your app → **Authentication** → add `https://<your-custom-domain>/signin-oidc`.
+
+#### Step 2: Deploy infrastructure
+
+```powershell
+# PowerShell
+az login
+az account set --subscription "<your-subscription-id>"
+az group create --name rg-vidhelp-prod --location eastus
+
+az deployment group create `
+  --resource-group rg-vidhelp-prod `
+  --template-file infra/main.bicep `
+  --parameters suffix=helpdesk-prod `
+               tenantId=`<tenant-id from step 1`> `
+               clientId=`<client-id from step 1`> `
+               helpDeskGroupId=`<group-object-id`> `
+               didAuthority=did:web:yourdomain.com `
+               senderEmail=helpdesk@yourdomain.com `
+               senderUserId=`<sender-object-id`> `
+               skuName=P1v3 `
+               storageRedundancy=Standard_ZRS
+```
+
+```bash
+# bash / macOS
+az login
+az account set --subscription "<your-subscription-id>"
+az group create --name rg-vidhelp-prod --location eastus
+
+az deployment group create \
+  --resource-group rg-vidhelp-prod \
+  --template-file infra/main.bicep \
+  --parameters suffix=helpdesk-prod \
+               tenantId=<tenant-id from step 1> \
+               clientId=<client-id from step 1> \
+               helpDeskGroupId=<group-object-id> \
+               didAuthority=did:web:yourdomain.com \
+               senderEmail=helpdesk@yourdomain.com \
+               senderUserId=<sender-object-id> \
+               skuName=P1v3 \
+               storageRedundancy=Standard_ZRS
+```
+
+The Bicep template creates all Azure resources (App Service plan, three App Services, **Key Vault** named `kv-helpdesk-prod`, Storage Account, Application Insights), assigns Managed Identity RBAC roles, sets all non-secret configuration, and **automatically pulls and builds the application code from GitHub using Oryx** — no separate code deployment step is needed.
+
+> [!NOTE]
+> If the deployment fails with `SubscriptionIsOverQuotaForSku`, your subscription does not have capacity for the chosen SKU in that region. Try a different `--location`, change `skuName` to a different tier (e.g. `S1` or `P0v3`), or use the [App Service self-service quota experience](https://techcommunity.microsoft.com/blog/appsonazureblog/announcing-the-public-preview-of-the-new-app-service-quota-self-service-experien/4450415) to request an increase without a support ticket.
+
+#### Step 3: Add the certificate to Key Vault
+
+Now that the Key Vault exists, create the certificate and register it with the app registration:
+
+```powershell
+$suffix   = "helpdesk-prod"
+$clientId = "<client-id from step 1>"
+
+.\scripts\Set-AppCertificate.ps1 `
+    -KeyVaultName "kv-$suffix" `
+    -AppId $clientId
+```
+
+#### Step 4: Grant Graph permissions to managed identities
+
+```powershell
+.\scripts\Grant-ManagedIdentityPermissions.ps1 `
+    -ResourceGroupName rg-vidhelp-prod `
+    -Suffix helpdesk-prod
+```
+
+#### Step 5: Set the HMAC key in Key Vault
+
+```powershell
+# PowerShell (no Python required)
+$kvName = "kv-helpdesk-prod"   # matches your 'suffix' parameter
+$hmacKey = [Convert]::ToBase64String(
+    [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+az keyvault secret set --vault-name $kvName --name HmacKey --value $hmacKey
+```
+
+```bash
+# bash / macOS alternative
+KV_NAME="kv-helpdesk-prod"
+az keyvault secret set --vault-name "$KV_NAME" --name HmacKey \
+  --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
+```
+
+#### Step 6: Application code
+
+**No action required.** The Bicep deployment in Step 2 automatically pulls and builds the application code from the `main` branch of this repository using Oryx. All three App Services start automatically after the build completes.
+
+> [!NOTE]
+> The first build takes a few minutes. If an app returns a startup error, wait 2–3 minutes and refresh. Monitor progress under each App Service → **Deployment Center → Logs**.
+
+**To re-deploy** after a code change, run:
+
+```powershell
+# PowerShell — trigger Oryx re-pull and rebuild from GitHub
+$SUFFIX = "helpdesk-prod"
+$RG     = "rg-vidhelp-prod"
+
+az webapp deployment source sync -g $RG -n "app-api-$SUFFIX"
+az webapp deployment source sync -g $RG -n "app-agents-$SUFFIX"
+az webapp deployment source sync -g $RG -n "app-verify-$SUFFIX"
+```
+
+```bash
+# bash / macOS
+SUFFIX="helpdesk-prod"
+RG="rg-vidhelp-prod"
+
+az webapp deployment source sync -g "$RG" -n "app-api-${SUFFIX}"
+az webapp deployment source sync -g "$RG" -n "app-agents-${SUFFIX}"
+az webapp deployment source sync -g "$RG" -n "app-verify-${SUFFIX}"
+```
+
+<details>
+<summary>Manual deploy fallback (if Oryx is not working)</summary>
+
+```powershell
+# PowerShell
+$SUFFIX = "helpdesk-prod"
+$RG     = "rg-vidhelp-prod"
+
+dotnet publish src/VerifiedIdHelpdesk.Api         -c Release -o ./publish/api
+dotnet publish src/VerifiedIdHelpdesk.AgentPortal  -c Release -o ./publish/agents
+dotnet publish src/VerifiedIdHelpdesk.VerifyPortal -c Release -o ./publish/verify
+
+az webapp deploy -g $RG -n "app-api-$SUFFIX"     --src-path ./publish/api
+az webapp deploy -g $RG -n "app-agents-$SUFFIX"  --src-path ./publish/agents
+az webapp deploy -g $RG -n "app-verify-$SUFFIX"  --src-path ./publish/verify
+```
+
+```bash
+# bash / macOS
+SUFFIX="helpdesk-prod"
+RG="rg-vidhelp-prod"
+
+dotnet publish src/VerifiedIdHelpdesk.Api         -c Release -o ./publish/api
+dotnet publish src/VerifiedIdHelpdesk.AgentPortal  -c Release -o ./publish/agents
+dotnet publish src/VerifiedIdHelpdesk.VerifyPortal -c Release -o ./publish/verify
+
+az webapp deploy -g "$RG" -n "app-api-${SUFFIX}"     --src-path ./publish/api
+az webapp deploy -g "$RG" -n "app-agents-${SUFFIX}"  --src-path ./publish/agents
+az webapp deploy -g "$RG" -n "app-verify-${SUFFIX}"  --src-path ./publish/verify
+```
+
+</details>
+
 
 ## Entra App Registration Setup
 
+You can complete this section manually in the Entra portal or use the automated PowerShell scripts. Both produce the same result.
+
+### Automated App Registration (two-script flow)
+
+The app registration setup is split into two scripts so you can create the app registration **before** deploying infrastructure. The Key Vault is created by the Bicep deployment.
+
+#### Script 1: `New-AppRegistration.ps1` — create the app registration
+
+Creates the app registration, service principal, API permissions, admin consent, and group claims configuration. Use `-SkipCert` when Key Vault doesn't exist yet:
+
+```powershell
+# Step 1 of deployment — run BEFORE deploying infrastructure
+.\scripts\New-AppRegistration.ps1 `
+    -AgentPortalUrl "https://app-agents-<suffix>.azurewebsites.net" `
+    -SkipCert
+```
+
+```powershell
+# All options (run after infra if you want the cert created in the same step)
+.\scripts\New-AppRegistration.ps1 `
+    -DisplayName "Helpdesk Verified ID" `
+    -AgentPortalUrl "https://app-agents-helpdesk-prod.azurewebsites.net" `
+    -KeyVaultName kv-helpdesk-prod `
+    -CertValidityMonths 36
+```
+
+**Requirements:**
+- PowerShell 7+
+- Azure CLI installed and signed in (`az login`)
+- You must be a **Global Administrator** or **Privileged Role Administrator** to grant admin consent
+
+When the script finishes, it prints your **Tenant ID** and **Client ID**.
+
+#### Script 2: `Set-AppCertificate.ps1` — add the certificate
+
+Creates a self-signed certificate in Key Vault and registers the public key with the app registration. Run this **after** the infrastructure deployment (which creates the Key Vault):
+
+```powershell
+# Step 3 of deployment — run AFTER deploying infrastructure
+.\scripts\Set-AppCertificate.ps1 `
+    -KeyVaultName kv-helpdesk-prod `
+    -AppId "<client-id from New-AppRegistration.ps1>"
+```
+
+**Requirements:**
+- Azure CLI installed and signed in
+- Key Vault already exists (created by Bicep)
+- You need **Key Vault Certificates Officer** role (the script assigns it automatically if you have Owner or User Access Administrator on the vault)
+
+The private key is generated inside Key Vault and never leaves it. The script also exports a local PEM file for development if run on a developer workstation.
+
+> **Note:** If the Entra Verified ID service principal has not yet been provisioned in your tenant (requires completing [Entra Verified ID Setup](#entra-verified-id-setup) first), the `VerifiableCredential.Create.All` permission must be added manually afterward. `New-AppRegistration.ps1` prints instructions if this is the case.
+
+### Manual Setup
+
+Follow these steps if you prefer to use the Entra portal.
+
 ### 1. Create the registration
 
-1. In the Azure portal, navigate to **Microsoft Entra ID** → **App registrations** → **New registration**
+1. In the Entra portal, navigate to **Microsoft Entra ID** → **App registrations** → **New registration**
 2. Set a display name (e.g., `VerifiedID Helpdesk`)
 3. Set **Supported account types** to **Single tenant**
 4. Add a **Redirect URI** of type **Web**: `https://localhost:5002/signin-oidc` (add your production URL too)
@@ -199,16 +628,34 @@ Navigate to **API permissions** → **Add a permission**:
 | `GroupMember.Read.All` | Application | Microsoft Graph |
 | `Mail.Send` | Application | Microsoft Graph |
 | `Chat.Create` | Application | Microsoft Graph |
-| `ChatMessage.Send` | Application | Microsoft Graph |
-| `VerifiableCredential.Create.All` | Application | Azure Active Directory Verifiable Credentials |
+| `Chat.ReadWrite.All` | Application | Microsoft Graph |
+| `VerifiableCredential.Create.All` | Application | Verifiable Credentials Service Request |
 
 After adding all permissions, click **Grant admin consent for \<your tenant\>**.
 
-### 3. Create a client secret
+### 3. Create a client certificate
 
-Navigate to **Certificates & secrets** → **New client secret**. Set an expiry and copy the value immediately — it will not be shown again. Store it in Key Vault as `EntraClientSecret`.
+Navigate to **Certificates & secrets** → **Certificates** → **Upload certificate**.
 
-> **Production recommendation:** Use a certificate instead of a client secret. See [How to use certificate credentials](https://learn.microsoft.com/en-us/entra/identity-platform/certificate-credentials).
+Upload the public key (`.cer` file) of a certificate whose private key is stored in Azure Key Vault. The recommended approach is to create the certificate directly in Key Vault:
+
+```powershell
+# PowerShell
+$policy = az keyvault certificate get-default-policy
+az keyvault certificate create --vault-name <kv-name> --name EntraClientCert --policy $policy
+az keyvault certificate download --vault-name <kv-name> --name EntraClientCert `
+  --file EntraClientCert.cer --encoding DER
+```
+
+```bash
+# bash / macOS
+az keyvault certificate create --vault-name <kv-name> --name EntraClientCert --policy \
+  "$(az keyvault certificate get-default-policy)"
+az keyvault certificate download --vault-name <kv-name> --name EntraClientCert \
+  --file EntraClientCert.cer --encoding DER
+```
+
+Then upload `EntraClientCert.cer` in the portal. The private key never leaves Key Vault.
 
 ### 4. Enable group claims in the token
 
@@ -228,72 +675,97 @@ Alternatively, add to the app registration **Manifest**:
 
 If your agents belong to more than 200 Entra security groups, the `groups` claim will be omitted from the token (overage scenario). The application handles this automatically: when it detects the `_claim_names` overage indicator in the token, it falls back to a Microsoft Graph `checkMemberGroups` call. No configuration is needed — just ensure the `GroupMember.Read.All` application permission is granted.
 
-## Entra Verified ID Setup
+## Configuration Reference
 
-This sample requires a configured Entra Verified ID tenant with an **employee credential type** defined. If you have not set this up yet, follow:
+All non-secret values can be supplied in three ways — ASP.NET Core reads all of them automatically:
 
-1. [Set up a tenant for Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-configure-tenant)
-2. [Configure a custom credential](https://learn.microsoft.com/en-us/entra/verified-id/how-to-customize-credentials)
-3. Set `VerifiedId:DidAuthority` to your DID (e.g., `did:web:yourdomain.com`) and `VerifiedId:CredentialType` to the name of your credential type
+| Environment | How to set config |
+|-------------|-------------------|
+| **Local development** | `appsettings.Development.json` or `dotnet user-secrets` |
+| **Azure App Service** | App Service **Application Settings** (exposed as environment variables) |
+| **Any environment** | Environment variables (use `__` instead of `:` as the hierarchy separator) |
 
-> **Local testing tip:** Use a separate dev credential type so test presentations do not appear in production audit logs.
+Secrets (`HmacKey`) are always read from Key Vault via Managed Identity regardless of environment. The app registration certificate (`EntraClientCert`) is created in Key Vault by the script and referenced via the `AzureAd:ClientCertificates` config block.
 
-## Deployment (Azure)
+> **App Service note:** Set each key as an Application Setting with `__` replacing `:`.
+> For example, `AzureAd:TenantId` becomes `AzureAd__TenantId`.
+> The single value you _must_ set is `KeyVault__Uri` — the app uses it to load everything else from Key Vault at startup.
 
-### 1. Deploy infrastructure with Bicep
+### Configuration keys
 
-```bash
-# Log in and set your subscription
-az login
-az account set --subscription "<your-subscription-id>"
+| appsettings.json key | App Service / env var name | Description |
+|----------------------|---------------------------|-------------|
+| `AzureAd:Instance` | `AzureAd__Instance` | Always `https://login.microsoftonline.com/` |
+| `AzureAd:TenantId` | `AzureAd__TenantId` | Your Entra tenant ID (GUID) |
+| `AzureAd:ClientId` | `AzureAd__ClientId` | App registration client ID (GUID) |
+| `AzureAd:CallbackPath` | `AzureAd__CallbackPath` | OIDC redirect path — leave as `/signin-oidc` |
+| `AzureAd:ClientCertificates:0:SourceType` | `AzureAd__ClientCertificates__0__SourceType` | `KeyVault` |
+| `AzureAd:ClientCertificates:0:KeyVaultUrl` | `AzureAd__ClientCertificates__0__KeyVaultUrl` | Full URI of your Key Vault |
+| `AzureAd:ClientCertificates:0:KeyVaultCertificateName` | `AzureAd__ClientCertificates__0__KeyVaultCertificateName` | Certificate name — `EntraClientCert` |
+| `KeyVault:Uri` | `KeyVault__Uri` | Full URI of your Key Vault, e.g. `https://kv-my-vault.vault.azure.net/` |
+| `VerifiedId:TenantId` | `VerifiedId__TenantId` | Entra tenant ID — same as `AzureAd:TenantId` |
+| `VerifiedId:ClientId` | `VerifiedId__ClientId` | App registration client ID — same as `AzureAd:ClientId` |
+| `VerifiedId:DidAuthority` | `VerifiedId__DidAuthority` | Your DID, e.g. `did:web:yourdomain.com` |
+| `VerifiedId:CredentialType` | `VerifiedId__CredentialType` | Verifiable credential type name, e.g. `EmployeeVerifiedCredential` |
+| `VerifiedId:RequestServiceBaseUrl` | `VerifiedId__RequestServiceBaseUrl` | Always `https://verifiedid.did.msidentity.com/v1.0/` |
+| `Storage:AccountUri` | `Storage__AccountUri` | Azure Table Storage endpoint, e.g. `https://stmystorage.table.core.windows.net/` |
+| `AuthorizationGroups:HelpDeskAgents` | `AuthorizationGroups__HelpDeskAgents` | Object ID of the Entra security group for helpdesk agents |
+| `AgentPortal:BaseUrl` | `AgentPortal__BaseUrl` | Public base URL of the Agent Portal, e.g. `https://agents.yourdomain.com` |
+| `VerifyPortal:BaseUrl` | `VerifyPortal__BaseUrl` | Public base URL of the Verify Portal, e.g. `https://verify.yourdomain.com` |
+| `Api:BaseUrl` | `Api__BaseUrl` | Public base URL of the Backend API, e.g. `https://api.yourdomain.com` |
+| `Notifications:SenderEmail` | `Notifications__SenderEmail` | UPN of the mailbox used to send email notifications |
+| `Notifications:SenderUserId` | `Notifications__SenderUserId` | Object ID of the sender's Entra user account |
+| `ApplicationInsights:ConnectionString` | `ApplicationInsights__ConnectionString` | App Insights connection string (non-secret) |
 
-# Create a resource group
-az group create --name rg-vidhelp-prod --location eastus
+### Key Vault secrets
 
-# Deploy all resources
-az deployment group create \
-  --resource-group rg-vidhelp-prod \
-  --template-file infra/main.bicep \
-  --parameters @infra/parameters.json
+| Secret / Certificate name | Value |
+|---------------------------|-------|
+| `EntraClientCert` | Self-signed certificate created by `New-AppRegistration.ps1`. The private key is generated inside Key Vault and never exported. |
+| `HmacKey` | 32-byte cryptographically random value, base64-encoded. PowerShell: `[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))` |
+
+### Setting App Service Application Settings
+
+```powershell
+# PowerShell
+$RG = "rg-vidhelp-prod"
+
+az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-prod --settings `
+  AzureAd__TenantId="<tenant-id>" `
+  AzureAd__ClientId="<client-id>" `
+  KeyVault__Uri="https://kv-helpdesk-prod.vault.azure.net/" `
+  VerifiedId__TenantId="<tenant-id>" `
+  VerifiedId__ClientId="<client-id>" `
+  VerifiedId__DidAuthority="did:web:yourdomain.com" `
+  VerifiedId__CredentialType="EmployeeVerifiedCredential" `
+  Storage__AccountUri="https://stmystorage.table.core.windows.net/" `
+  AuthorizationGroups__HelpDeskAgents="<group-object-id>" `
+  AgentPortal__BaseUrl="https://agents.yourdomain.com" `
+  VerifyPortal__BaseUrl="https://verify.yourdomain.com" `
+  Api__BaseUrl="https://api.yourdomain.com" `
+  Notifications__SenderEmail="helpdesk@yourdomain.com" `
+  Notifications__SenderUserId="<sender-object-id>"
 ```
 
-The deployment creates all App Services, Storage Account, Key Vault, and Application Insights, and wires up all RBAC role assignments automatically.
-
-### 2. Set Key Vault secrets after deployment
-
-The Bicep template does not write secrets (they contain sensitive values). Set them manually after deployment:
-
 ```bash
-KV_NAME="kv-helpdesk-prod"   # matches your 'suffix' parameter
+# bash / macOS alternative
+RG="rg-vidhelp-prod"
 
-az keyvault secret set --vault-name "$KV_NAME" --name EntraClientSecret --value "<your-client-secret>"
-az keyvault secret set --vault-name "$KV_NAME" --name HmacKey --value "<your-32-byte-base64-key>"
-```
-
-### 3. Restrict the Agent Portal to your corporate IP
-
-The `corporateIpRange` parameter in `parameters.json` sets an App Service IP restriction on the Agent Portal. Update it to your corporate IP range (CIDR notation) before deploying:
-
-```json
-"corporateIpRange": { "value": "203.0.113.0/24" }
-```
-
-### 4. Set environment on all App Services
-
-The Bicep template sets `ASPNETCORE_ENVIRONMENT=Production` automatically. No manual step needed.
-
-### 5. Deploy application code
-
-```bash
-# Build and publish (repeat for each app)
-dotnet publish src/VerifiedIdHelpdesk.Api -c Release -o ./publish/api
-dotnet publish src/VerifiedIdHelpdesk.AgentPortal -c Release -o ./publish/agents
-dotnet publish src/VerifiedIdHelpdesk.VerifyPortal -c Release -o ./publish/verify
-
-# Deploy via Azure CLI (or use GitHub Actions / Azure DevOps)
-az webapp deploy --resource-group rg-vidhelp-prod --name app-api-helpdesk-prod     --src-path ./publish/api
-az webapp deploy --resource-group rg-vidhelp-prod --name app-agents-helpdesk-prod  --src-path ./publish/agents
-az webapp deploy --resource-group rg-vidhelp-prod --name app-verify-helpdesk-prod  --src-path ./publish/verify
+az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-prod --settings \
+  AzureAd__TenantId="<tenant-id>" \
+  AzureAd__ClientId="<client-id>" \
+  KeyVault__Uri="https://kv-helpdesk-prod.vault.azure.net/" \
+  VerifiedId__TenantId="<tenant-id>" \
+  VerifiedId__ClientId="<client-id>" \
+  VerifiedId__DidAuthority="did:web:yourdomain.com" \
+  VerifiedId__CredentialType="EmployeeVerifiedCredential" \
+  Storage__AccountUri="https://stmystorage.table.core.windows.net/" \
+  AuthorizationGroups__HelpDeskAgents="<group-object-id>" \
+  AgentPortal__BaseUrl="https://agents.yourdomain.com" \
+  VerifyPortal__BaseUrl="https://verify.yourdomain.com" \
+  Api__BaseUrl="https://api.yourdomain.com" \
+  Notifications__SenderEmail="helpdesk@yourdomain.com" \
+  Notifications__SenderUserId="<sender-object-id>"
 ```
 
 ## Customization Guide
@@ -305,7 +777,7 @@ az webapp deploy --resource-group rg-vidhelp-prod --name app-verify-helpdesk-pro
 | **Code length or expiry** | Edit `src/VerifiedIdHelpdesk.Core/Constants.cs` — change `CodeLength` and/or `CodeExpiryMinutes` |
 | **Add a delivery channel (e.g., SMS)** | Implement `INotificationService` in `src/VerifiedIdHelpdesk.Notifications/` and register it in the API's `Program.cs` |
 | **Change the agent authorization group** | Update `AuthorizationGroups:HelpDeskAgents` in `appsettings.json` (or Key Vault if you prefer) |
-| **Use a certificate instead of client secret** | Update `AddMicrosoftIdentityWebApp` / `AddMicrosoftIdentityWebApiAuthentication` in both AgentPortal and API `Program.cs` to load a certificate from Key Vault. See [Microsoft docs](https://learn.microsoft.com/en-us/entra/identity-platform/certificate-credentials). |
+| **Renew the app certificate** | Run `az keyvault certificate create --vault-name <kv> --name EntraClientCert --policy ...` to issue a new version, then upload the new public key in the portal under **Certificates & secrets** |
 | **Add a supervisor role** | Add a new Entra group, add it to `AuthorizationGroups` in config, and add a new policy in `Program.cs` with `policy.RequireClaim("groups", ...)` |
 | **Change session storage** | Implement `ISessionStore` in `VerifiedIdHelpdesk.Infrastructure` (swap Azure Table Storage for Cosmos DB, SQL, etc.) |
 

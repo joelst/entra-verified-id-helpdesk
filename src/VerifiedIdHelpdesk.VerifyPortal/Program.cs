@@ -32,7 +32,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Referrer-Policy", "strict-origin");
     context.Response.Headers.Append("Content-Security-Policy",
         "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
-        "style-src 'self'; img-src 'self' data:;");
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:;");
     await next();
 });
 

@@ -458,7 +458,7 @@ The group Object ID in `appsettings.json` is the only value that needs to change
 }
 ```
 
-**Step required in the app registration — do not skip:** Group claims are not included in Entra tokens by default. In the Azure portal, go to the app registration → **Token configuration** → **Add groups claim** → select **Security groups** → check **Group ID** for ID token and access token. Without this, `RequireClaim("groups", ...)` will never match and all agents will be denied.
+**Step required in the app registration — do not skip:** Group claims are not included in Entra tokens by default. In the Entra portal, go to the app registration → **Token configuration** → **Add groups claim** → select **Security groups** → check **Group ID** for ID token and access token. Without this, `RequireClaim("groups", ...)` will never match and all agents will be denied.
 
 Alternatively, add to the app registration manifest:
 ```json

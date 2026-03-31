@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\VerifiedIdHelpdesk.Core\VerifiedIdHelpdesk.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Web.GraphServiceClient" Version="4.6.0" />
     <PackageReference Include="Microsoft.Graph" Version="5.103.0" />
-    <PackageReference Include="Microsoft.Identity.Web.MicrosoftGraph" Version="4.6.0" />
     <PackageReference Include="Azure.Identity" Version="1.19.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />

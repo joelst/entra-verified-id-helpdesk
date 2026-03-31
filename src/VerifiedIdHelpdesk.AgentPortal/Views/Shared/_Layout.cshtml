@@ -10,12 +10,12 @@
 <body>
     <header class="site-header">
         <div class="header-inner">
-            <img src="~/images/logo.png" alt="Your Organization" class="logo"
+            <img src="~/images/logo.svg" alt="Your Organization" class="logo"
                  onerror="this.style.display='none'" />
             <span class="app-title">Identity Verification — Agent Portal</span>
             @if (User.Identity?.IsAuthenticated == true)
             {
-                <span class="agent-name">@User.Identity.Name</span>
+                <span class="agent-name">@(User.FindFirst("name")?.Value ?? User.Identity.Name)</span>
                 <a href="/MicrosoftIdentity/Account/SignOut" class="btn btn-sm sign-out-btn">Sign Out</a>
             }
         </div>

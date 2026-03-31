@@ -20,11 +20,21 @@ builder.Configuration.AddAzureKeyVault(
 // ── Authentication — Entra OIDC ───────────────────────────────────────────
 // SECURITY: All portal pages require Entra authentication (fallback policy below).
 // CUSTOMIZE: Configure your app registration in appsettings.json under AzureAd.
+var apiScopes = builder.Configuration.GetSection("Api:Scopes").Get<string[]>() ?? [];
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
-    .EnableTokenAcquisitionToCallDownstreamApi()
-    .AddMicrosoftGraph(builder.Configuration.GetSection("MicrosoftGraph"))
+    .EnableTokenAcquisitionToCallDownstreamApi(apiScopes)
     .AddInMemoryTokenCaches();
+
+// ── Microsoft Graph — app-only (application permissions) ──────────────────
+// Directory search, group membership checks, and email/Teams all use application
+// permissions (User.Read.All, GroupMember.Read.All, Mail.Send, etc.). These don't
+// require a user context — the app authenticates as itself via managed identity.
+builder.Services.AddSingleton(_ =>
+{
+    var credential = new DefaultAzureCredential();
+    return new Microsoft.Graph.GraphServiceClient(credential, ["https://graph.microsoft.com/.default"]);
+});
 
 // ── Authorization ──────────────────────────────────────────────────────────
 // SECURITY: FallbackPolicy ensures every page requires login — no anonymous access.

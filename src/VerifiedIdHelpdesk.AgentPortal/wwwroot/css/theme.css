@@ -63,7 +63,23 @@ body {
 .logo { height: 32px; width: auto; }
 .app-title { color: #AABBCC; font-size: var(--font-size-lg); font-weight: 400; }
 .agent-name { margin-left: auto; color: var(--color-white); font-size: var(--font-size-sm); }
-.sign-out-btn { margin-left: 12px; font-size: var(--font-size-sm); padding: 4px 12px; }
+.sign-out-btn {
+  margin-left: 12px;
+  font-size: var(--font-size-sm);
+  padding: 4px 14px;
+  color: var(--color-white);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sign-out-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--color-white);
+  color: var(--color-white);
+}
 
 /* ── Page wrapper ───────────────────────────────────────── */
 .main-content { max-width: 800px; margin: 40px auto; padding: 0 24px; }
