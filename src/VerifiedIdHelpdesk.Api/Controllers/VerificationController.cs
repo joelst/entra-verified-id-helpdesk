@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 using System.Text.Json;
@@ -111,6 +112,7 @@ public class VerificationController : ControllerBase
     }
 
     [HttpPost("initiate")]
+    [EnableRateLimiting("initiate")]
     public async Task<IActionResult> Initiate([FromBody] InitiateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
@@ -186,6 +188,7 @@ public class VerificationController : ControllerBase
     }
 
     [HttpGet("public-status/{sessionId}")]
+    [EnableRateLimiting("public-status")]
     public async Task<IActionResult> PublicStatus(string sessionId)
     {
         var session = await _sessions.GetAsync(sessionId);

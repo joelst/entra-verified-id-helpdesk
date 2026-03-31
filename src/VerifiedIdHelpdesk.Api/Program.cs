@@ -1,7 +1,9 @@
 using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Identity.Web;
+using System.Threading.RateLimiting;
 using VerifiedIdHelpdesk.Core;
 using VerifiedIdHelpdesk.Core.Interfaces;
 using VerifiedIdHelpdesk.Infrastructure;
@@ -69,9 +71,46 @@ if (!builder.Environment.IsEnvironment("Testing"))
 
 builder.Services.AddControllers();
 
+// Rate limiting — protect public endpoints from abuse
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // /api/verification/initiate — 10 requests/minute per IP
+    options.AddPolicy("initiate", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // /api/verification/public-status — 60 requests/minute per IP
+    options.AddPolicy("public-status", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // /api/verification/callback — 30 requests/minute per IP
+    options.AddPolicy("callback", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
+
 var app = builder.Build();
 
 app.UseCors("AllowPortals");
+app.UseRateLimiter();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

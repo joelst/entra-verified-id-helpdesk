@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -32,6 +33,7 @@ public class CallbackController : ControllerBase
     }
 
     [HttpPost("callback")]
+    [EnableRateLimiting("callback")]
     public async Task<IActionResult> Callback([FromBody] JsonElement body)
     {
         _logger.LogDebug("Callback received: {Body}", body.GetRawText());
