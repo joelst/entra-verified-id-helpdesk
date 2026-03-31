@@ -79,7 +79,9 @@ public class CallbackController : ControllerBase
             var verifiedClaims = ExtractClaims(body);
             session.Status = "verified";
             session.VerifiedAt = DateTime.UtcNow;
-            session.VerifiedClaims = JsonSerializer.Serialize(verifiedClaims);
+            var claimsJson = JsonSerializer.Serialize(verifiedClaims);
+            // Azure Table Storage has a 64KB property limit; truncate if needed
+            session.VerifiedClaims = claimsJson.Length > 30000 ? claimsJson[..30000] : claimsJson;
             await _sessions.UpdateAsync(session);
 
             await _hub.Clients.Group(session.SessionId).SendAsync("VerificationComplete", new
