@@ -34,18 +34,19 @@ public class CallbackController : ControllerBase
     [HttpPost("callback")]
     public async Task<IActionResult> Callback([FromBody] JsonElement body)
     {
-        // Validate the callback JWT
-        if (!body.TryGetProperty("id_token", out var idTokenEl))
-            return BadRequest("Missing id_token.");
+        _logger.LogDebug("Callback received: {Body}", body.GetRawText());
 
-        var idToken = idTokenEl.GetString();
-        if (string.IsNullOrEmpty(idToken))
-            return BadRequest("Empty id_token.");
-
-        if (!await ValidateCallbackTokenAsync(idToken))
+        // Validate the callback JWT if a receipt is present
+        // The id_token is inside receipt.id_token (only present when includeReceipt=true)
+        if (body.TryGetProperty("receipt", out var receipt)
+            && receipt.TryGetProperty("id_token", out var idTokenEl))
         {
-            _logger.LogWarning("Callback received with invalid JWT signature");
-            return Forbid();
+            var idToken = idTokenEl.GetString();
+            if (!string.IsNullOrEmpty(idToken) && !await ValidateCallbackTokenAsync(idToken))
+            {
+                _logger.LogWarning("Callback received with invalid JWT signature");
+                return Forbid();
+            }
         }
 
         // Extract state (sessionId) and event type

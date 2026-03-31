@@ -63,6 +63,7 @@ public class EntraVerifiedIdClient : IVerifiedIdClient
         var body = new
         {
             includeQRCode = true,
+            includeReceipt = true,
             authority = _config["VerifiedId:DidAuthority"],
             registration = new { clientName = "Identity Verification Helpdesk" },
             callback = new
