@@ -5,10 +5,16 @@
 .DESCRIPTION
     This script automates the steps in the "Entra App Registration Setup" section of the README:
       - Creates a single-tenant app registration
-      - Adds all required API permissions (Microsoft Graph + Entra Verified ID)
-      - Grants admin consent
+      - Adds API permissions: Entra Verified ID (VerifiableCredential.Create.All) and the
+        self-referential access_as_agent delegated scope for OBO flow
+      - Grants admin consent for Verified ID
       - Configures Security Group claims in the token
       - Optionally creates a self-signed certificate in Key Vault and registers it with the app
+
+    Microsoft Graph permissions are NOT added to the app registration. Instead, they are
+    granted directly to the App Service managed identities after infrastructure deployment
+    using Grant-ManagedIdentityPermissions.ps1. This follows the least-privilege principle —
+    only the managed identities that need Graph access receive it.
 
     Use -SkipCert to skip the Key Vault certificate step and run Set-AppCertificate.ps1 later
     (after Azure infrastructure has been deployed). This allows you to create the app registration
@@ -129,23 +135,13 @@ Write-Information "  Tenant       : $($account.tenantId)"
 Write-Information "  Subscription : $($account.name)"
 
 # ---------------------------------------------------------------------------
-# Look up service principals for Microsoft Graph and Entra Verified ID
+# Look up service principal for Entra Verified ID
 # ---------------------------------------------------------------------------
 
 Write-Step 'Looking up service principals'
 
-# Microsoft Graph app ID is stable across all tenants
-$GraphAppId = '00000003-0000-0000-c000-000000000000'
-
 # Microsoft Entra Verified ID (Azure AD Verifiable Credentials)
 $VerifiedIdAppId = '3db474b9-6a0c-4840-96ac-1fceb342124f'
-
-$graphSp = az ad sp show --id $GraphAppId 2>$null | ConvertFrom-Json
-if (-not $graphSp) {
-    Write-Error 'Could not find the Microsoft Graph service principal. Is this a valid Entra tenant?'
-    exit 1
-}
-Write-Information "  Found: $($graphSp.appDisplayName)"
 
 $vcSp = az ad sp show --id $VerifiedIdAppId 2>$null | ConvertFrom-Json
 if (-not $vcSp) {
@@ -161,30 +157,14 @@ else {
 
 Write-Step 'Resolving API permission IDs'
 
-$graphPermNames = @('User.Read.All', 'GroupMember.Read.All', 'Mail.Send', 'Chat.Create', 'Chat.ReadWrite.All')
-$graphPermIds = $graphPermNames | ForEach-Object { Get-AppRoleId $graphSp $_ }
-Write-Information "  Graph permissions resolved: $($graphPermNames -join ', ')"
-
-$requiredAccess = @(
-    @{
-        resourceAppId  = $GraphAppId
-        resourceAccess = @($graphPermIds | ForEach-Object { @{ id = $_; type = 'Role' } })
-    }
-    # Self-referential delegated permission for OBO flow (AgentPortal → API)
-    @{
-        resourceAppId  = $appId
-        resourceAccess = @(@{ id = $scopeId; type = 'Scope' })
-    }
-)
-
+# Verified ID permission is resolved now; the self-referential OBO scope is added after
+# app creation (it needs $appId and $scopeId which don't exist yet).
+$vcPermId = $null
 if ($vcSp) {
     $vcPermId = Get-AppRoleId $vcSp 'VerifiableCredential.Create.All'
     Write-Information '  Verified ID permission resolved: VerifiableCredential.Create.All'
-    $requiredAccess += @{
-        resourceAppId  = $VerifiedIdAppId
-        resourceAccess = @(@{ id = $vcPermId; type = 'Role' })
-    }
 }
+Write-Information '  Graph permissions are NOT on the app registration (granted to managed identities instead)'
 
 # ---------------------------------------------------------------------------
 # Create the app registration
@@ -250,6 +230,26 @@ az ad sp create --id $appId | Out-Null
 Write-Information '  Done'
 
 # ---------------------------------------------------------------------------
+# Build required resource access (all permissions at once)
+# ---------------------------------------------------------------------------
+
+# Only the self-referential OBO scope and Verified ID permission are on the app registration.
+# Graph permissions are granted directly to managed identities via Grant-ManagedIdentityPermissions.ps1.
+$requiredAccess = @(
+    @{
+        resourceAppId  = $appId
+        resourceAccess = @(@{ id = $scopeId; type = 'Scope' })
+    }
+)
+
+if ($vcPermId) {
+    $requiredAccess += @{
+        resourceAppId  = $VerifiedIdAppId
+        resourceAccess = @(@{ id = $vcPermId; type = 'Role' })
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Set required resource access (all permissions at once)
 # ---------------------------------------------------------------------------
 
@@ -265,15 +265,22 @@ Remove-Item $tempFile
 Write-Information '  Permissions set'
 
 # ---------------------------------------------------------------------------
-# Grant admin consent
+# Grant admin consent for Verified ID
 # ---------------------------------------------------------------------------
 
 Write-Step 'Granting admin consent'
 Write-Information '  Waiting a few seconds for the service principal to propagate...'
 Start-Sleep -Seconds 10
 
-az ad app permission admin-consent --id $appId
-Write-Information '  Admin consent granted'
+# Only Verified ID needs admin consent on the app registration.
+# Graph permissions are granted to managed identities separately.
+if ($vcSp) {
+    az ad app permission admin-consent --id $appId
+    Write-Information '  Admin consent granted for Verified ID'
+}
+else {
+    Write-Information '  Skipped — Verified ID service principal not found (grant consent manually)'
+}
 
 # ---------------------------------------------------------------------------
 # Configure Security Group claims
@@ -332,9 +339,11 @@ Write-Output "  Tenant ID               : $tenantId"
 Write-Output ''
 
 if ($SkipCert -or -not $KeyVaultName) {
-    Write-Output '-- Next step -----------------------------------------'
-    Write-Output '  Deploy Azure infrastructure (Bicep), then run:'
-    Write-Output "  .\scripts\Set-AppCertificate.ps1 -KeyVaultName <kv-name> -AppId $appId"
+    Write-Output '-- Next steps ----------------------------------------'
+    Write-Output '  1. Deploy Azure infrastructure (Bicep), then run:'
+    Write-Output "     .\scripts\Set-AppCertificate.ps1 -KeyVaultName <kv-name> -AppId $appId"
+    Write-Output '  2. Grant Graph permissions to managed identities:'
+    Write-Output '     .\scripts\Grant-ManagedIdentityPermissions.ps1 -ResourceGroupName <rg> -Suffix <suffix>'
     Write-Output ''
 }
 else {

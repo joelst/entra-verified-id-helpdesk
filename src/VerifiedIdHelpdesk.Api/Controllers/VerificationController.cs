@@ -65,7 +65,7 @@ public class VerificationController : ControllerBase
         {
             SessionId = Guid.NewGuid().ToString(),
             CodeHash = codeHash,
-            CallerEmail = request.CallerEmail,
+            CallerEmail = request.CallerEmail.Trim().ToLowerInvariant(),
             CallerEntraId = request.CallerEntraId,
             CallerDisplayName = request.CallerDisplayName ?? string.Empty,
             TicketId = request.TicketId ?? string.Empty,
@@ -191,8 +191,13 @@ public class VerificationController : ControllerBase
         var session = await _sessions.GetAsync(sessionId);
         if (session == null) return NotFound();
 
-        // Return only status — no claims, no PII (sessionId is a non-guessable GUID)
-        return Ok(new { status = session.Status });
+        // Return status + verified claims (sessionId is a non-guessable GUID)
+        return Ok(new
+        {
+            status = session.Status,
+            verifiedClaims = session.VerifiedClaims,
+            verifiedAt = session.VerifiedAt
+        });
     }
 
     private static string MaskEmail(string email)

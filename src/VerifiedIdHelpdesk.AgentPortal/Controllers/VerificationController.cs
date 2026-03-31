@@ -41,6 +41,7 @@ public class VerificationController : Controller
     // POST /Verification/Create
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [AuthorizeForScopes(ScopeKeySection = "Api:Scopes")]
     public async Task<IActionResult> Create(CreateVerificationViewModel model)
     {
         if (!ModelState.IsValid)
@@ -116,11 +117,8 @@ public class VerificationController : Controller
     public async Task<IActionResult> Result(string sessionId)
     {
         var client = _httpClientFactory.CreateClient("ApiClient");
-        var accessToken = await GetApiAccessTokenAsync();
-        if (!string.IsNullOrEmpty(accessToken))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await client.GetAsync($"/api/verification/status/{sessionId}");
+        var response = await client.GetAsync($"/api/verification/public-status/{sessionId}");
         if (!response.IsSuccessStatusCode)
             return RedirectToAction("Create");
 
@@ -159,6 +157,11 @@ public class VerificationController : Controller
     [HttpGet]
     [AllowAnonymous]
     public IActionResult AccessDenied() => View();
+
+    // GET /Verification/Error
+    [HttpGet]
+    [AllowAnonymous]
+    public IActionResult Error() => View();
 
     private async Task<string?> GetApiAccessTokenAsync()
     {

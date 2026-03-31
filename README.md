@@ -122,10 +122,10 @@ The app registration script needs a Key Vault to exist before it can create the 
 ```powershell
 # PowerShell — create resource group, Key Vault, and grant yourself access
 az group create --name rg-vidhelp-dev --location eastus
-az keyvault create --name kv-vidhelp-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
+az keyvault create --name kv-verified-id-app-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
 
 $myId    = az ad signed-in-user show --query id -o tsv
-$kvScope = az keyvault show --name kv-vidhelp-dev --query id -o tsv
+$kvScope = az keyvault show --name kv-verified-id-app-dev --query id -o tsv
 az role assignment create --role "Key Vault Secrets Officer"      --assignee $myId --scope $kvScope
 az role assignment create --role "Key Vault Certificates Officer" --assignee $myId --scope $kvScope
 ```
@@ -133,10 +133,10 @@ az role assignment create --role "Key Vault Certificates Officer" --assignee $my
 ```bash
 # bash / macOS
 az group create --name rg-vidhelp-dev --location eastus
-az keyvault create --name kv-vidhelp-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
+az keyvault create --name kv-verified-id-app-dev --resource-group rg-vidhelp-dev --location eastus --enable-rbac-authorization true
 
 MY_ID="$(az ad signed-in-user show --query id -o tsv)"
-KV_SCOPE="$(az keyvault show --name kv-vidhelp-dev --query id -o tsv)"
+KV_SCOPE="$(az keyvault show --name kv-verified-id-app-dev --query id -o tsv)"
 az role assignment create --role "Key Vault Secrets Officer"      --assignee "$MY_ID" --scope "$KV_SCOPE"
 az role assignment create --role "Key Vault Certificates Officer" --assignee "$MY_ID" --scope "$KV_SCOPE"
 ```
@@ -150,7 +150,7 @@ az role assignment create --role "Key Vault Certificates Officer" --assignee "$M
 The quickest path is the automated PowerShell script — it creates the certificate in Key Vault, registers it with the app, and configures your local dev environment in one step. See [Entra App Registration Setup](#entra-app-registration-setup) for manual steps and advanced options.
 
 ```powershell
-.\scripts\New-AppRegistration.ps1 -KeyVaultName kv-vidhelp-dev
+.\scripts\New-AppRegistration.ps1 -KeyVaultName kv-verified-id-app-dev
 ```
 
 The script:
@@ -174,12 +174,12 @@ At the end you will have:
 # Generate and store a random HMAC key (PowerShell — no Python required)
 $hmacKey = [Convert]::ToBase64String(
     [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-az keyvault secret set --vault-name kv-vidhelp-dev --name HmacKey --value $hmacKey
+az keyvault secret set --vault-name kv-verified-id-app-dev --name HmacKey --value $hmacKey
 ```
 
 ```bash
 # bash / macOS alternative
-az keyvault secret set --vault-name kv-vidhelp-dev --name HmacKey \
+az keyvault secret set --vault-name kv-verified-id-app-dev --name HmacKey \
   --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
 ```
 
@@ -189,9 +189,9 @@ Point each project at your Key Vault using .NET user secrets:
 
 ```
 # Works on Windows, Mac, and Linux — run from the repo root
-dotnet user-secrets set "KeyVault:Uri" "https://kv-vidhelp-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.Api
-dotnet user-secrets set "KeyVault:Uri" "https://kv-vidhelp-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.AgentPortal
-dotnet user-secrets set "KeyVault:Uri" "https://kv-vidhelp-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.VerifyPortal
+dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.Api
+dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.AgentPortal
+dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.VerifyPortal
 ```
 
 Then open `appsettings.json` (or `appsettings.Development.json`) in each project and fill in the values from your app registration and Verified ID setup. See the [Configuration Reference](#configuration-reference) table for a full list of keys.
@@ -232,7 +232,8 @@ The **Deploy to Azure** badge at the top of this page opens the Azure Portal dep
 | 1 | Run `New-AppRegistration.ps1 -SkipCert` | Azure CLI, Entra Global/App Admin |
 | 2 | Deploy infrastructure via portal (enter `clientId` from step 1) | Azure portal access |
 | 3 | Run `Set-AppCertificate.ps1` | Azure CLI, KV just deployed |
-| 4 | Store the HMAC key | Azure CLI |
+| 4 | Run `Grant-ManagedIdentityPermissions.ps1` | Azure CLI, Global/Priv. Role Admin |
+| 5 | Store the HMAC key | Azure CLI |
 
 #### Step 1: Create the Entra app registration
 
@@ -286,7 +287,21 @@ $clientId = "<client-id from step 1>"
 
 The script creates a self-signed certificate inside Key Vault (private key never leaves KV), registers the public key with the app registration, and optionally exports a PEM file for local development.
 
-#### Step 4: Store the HMAC key
+#### Step 4: Grant Graph permissions to managed identities
+
+The app registration only has Verified ID permissions. Graph permissions are granted directly to the App Service managed identities (least-privilege):
+
+```powershell
+.\scripts\Grant-ManagedIdentityPermissions.ps1 `
+    -ResourceGroupName "<your-resource-group>" `
+    -Suffix "$suffix"
+```
+
+This grants:
+- **AgentPortal**: `User.Read.All`, `GroupMember.Read.All` (directory search, group membership checks)
+- **API**: `User.Read.All`, `Mail.Send`, `Chat.Create`, `Chat.ReadWrite.All` (notifications)
+
+#### Step 5: Store the HMAC key
 
 Generate and store the HMAC key (used to sign one-time codes):
 
@@ -303,7 +318,7 @@ az keyvault secret set --vault-name "kv-<suffix>" --name HmacKey \
   --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
 ```
 
-#### Step 5: Application code
+#### Step 6: Application code
 
 **No action required.** The infrastructure deployment in Step 2 automatically pulls the latest code from the `main` branch of this repository and builds it using [Oryx](https://github.com/microsoft/Oryx). All three App Services (API, Agent Portal, Verify Portal) are built and started automatically.
 
@@ -369,7 +384,8 @@ az webapp deploy -g "$RG" -n "app-verify-${SUFFIX}"  --src-path ./publish/verify
 | 1 | Create Entra app registration (`-SkipCert`) |
 | 2 | Deploy infrastructure (Bicep) with `clientId` from step 1 |
 | 3 | Add certificate to Key Vault (`Set-AppCertificate.ps1`) |
-| 4 | Store the HMAC key |
+| 4 | Grant Graph permissions to managed identities |
+| 5 | Store the HMAC key |
 
 #### Step 1: Create the Entra app registration
 
@@ -447,7 +463,15 @@ $clientId = "<client-id from step 1>"
     -AppId $clientId
 ```
 
-#### Step 4: Set the HMAC key in Key Vault
+#### Step 4: Grant Graph permissions to managed identities
+
+```powershell
+.\scripts\Grant-ManagedIdentityPermissions.ps1 `
+    -ResourceGroupName rg-vidhelp-prod `
+    -Suffix helpdesk-prod
+```
+
+#### Step 5: Set the HMAC key in Key Vault
 
 ```powershell
 # PowerShell (no Python required)
@@ -464,7 +488,7 @@ az keyvault secret set --vault-name "$KV_NAME" --name HmacKey \
   --value "$(python3 -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
 ```
 
-#### Step 5: Application code
+#### Step 6: Application code
 
 **No action required.** The Bicep deployment in Step 2 automatically pulls and builds the application code from the `main` branch of this repository using Oryx. All three App Services start automatically after the build completes.
 
