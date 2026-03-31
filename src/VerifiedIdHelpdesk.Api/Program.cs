@@ -71,6 +71,9 @@ if (!builder.Environment.IsEnvironment("Testing"))
 
 builder.Services.AddControllers();
 
+// Health checks
+builder.Services.AddHealthChecks();
+
 // Rate limiting — protect public endpoints from abuse
 builder.Services.AddRateLimiter(options =>
 {
@@ -115,6 +118,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 app.MapHub<VerificationHub>(CoreConstants.VerificationHubPath);
 app.Run();
 

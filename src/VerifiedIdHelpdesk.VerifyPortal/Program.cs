@@ -24,6 +24,7 @@ builder.Services.AddHttpClient("ApiClient", client =>
 });
 
 builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -52,5 +53,6 @@ app.UseRouting();
 app.UseAuthorization();
 app.MapStaticAssets();
 app.MapRazorPages();
+app.MapHealthChecks("/health");
 
 app.Run();

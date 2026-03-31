@@ -67,6 +67,7 @@ builder.Services.AddControllersWithViews()
     .AddMicrosoftIdentityUI();
 
 builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -105,5 +106,6 @@ app.MapControllerRoute(
 app.MapControllerRoute(
     name: "MicrosoftIdentity",
     pattern: "MicrosoftIdentity/{controller=Account}/{action=SignIn}");
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();
