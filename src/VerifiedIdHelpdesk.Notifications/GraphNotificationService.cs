@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
@@ -85,7 +86,6 @@ public class GraphNotificationService : INotificationService
 
         var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
             ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is required for Teams notifications.");
-        var expiryText = expiresAt.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture);
 
         // Resolve recipient UPN → user ID
         var users = await _graph.Users.GetAsync(req =>
@@ -93,8 +93,8 @@ public class GraphNotificationService : INotificationService
             // SECURITY: Escape single quotes in the email to prevent OData filter injection.
             // OData uses single quotes as string delimiters; unescaped quotes could break the filter.
             var sanitizedEmail = recipientEmail.Replace("'", "''");
-            req.QueryParameters.Filter = $"mail eq '{sanitizedEmail}'";
-            req.QueryParameters.Select = ["id", "displayName"];
+            req.QueryParameters.Filter = $"mail eq '{sanitizedEmail}' or userPrincipalName eq '{sanitizedEmail}'";
+            req.QueryParameters.Select = ["id", "displayName", "mail", "userPrincipalName"];
             req.QueryParameters.Top = 1;
         });
 
@@ -128,16 +128,34 @@ public class GraphNotificationService : INotificationService
             ]
         });
 
-        var messageText = $"Your helpdesk verification code is: **{displayCode}**\n\n" +
-                          $"Verification portal: {verifyPortalUrl}\n\n" +
-                          $"This code expires at {expiryText}. Open the portal, enter your email and code, then approve the request in Microsoft Authenticator.";
+        var chatId = chat?.Id ?? throw new InvalidOperationException("Teams chat was created but no chat ID was returned.");
+        var messageHtml = BuildTeamsMessageHtml(displayCode, verifyPortalUrl, expiresAt);
 
-        await _graph.Chats[chat!.Id].Messages.PostAsync(new ChatMessage
+        await _graph.Chats[chatId].Messages.PostAsync(new ChatMessage
         {
-            Body = new ItemBody { Content = messageText }
+            Body = new ItemBody
+            {
+                ContentType = BodyType.Html,
+                Content = messageHtml
+            }
         });
 
         _logger.LogInformation("Verification code Teams message sent to {Email}", MaskEmail(recipientEmail));
+    }
+
+    private static string BuildTeamsMessageHtml(string displayCode, string verifyPortalUrl, DateTime expiresAt)
+    {
+        var expiryText = expiresAt.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture);
+        var encodedCode = WebUtility.HtmlEncode(displayCode);
+        var encodedUrl = WebUtility.HtmlEncode(verifyPortalUrl);
+
+        return $"<div>" +
+               $"<p>Your helpdesk agent has requested you verify your identity.</p>" +
+               $"<p><strong>Verification portal:</strong> <a href='{encodedUrl}'>{encodedUrl}</a></p>" +
+               $"<p><strong>Your one-time verification code is:</strong> <strong>{encodedCode}</strong></p>" +
+               $"<p>This code expires at <strong>{expiryText}</strong>.</p>" +
+               $"<p>Open the portal, enter your email address and code, then approve the request in Microsoft Authenticator.</p>" +
+               $"</div>";
     }
 
     private static string MaskEmail(string email)
