@@ -44,13 +44,14 @@ public class VerificationController : Controller
 
     // GET /Verification/PendingSessions — proxy to Api for JS on Create page
     [HttpGet]
-    [AuthorizeForScopes(ScopeKeySection = "Api:Scopes")]
     public async Task<IActionResult> PendingSessions()
     {
         var client = _httpClientFactory.CreateClient("ApiClient");
-        var accessToken = await GetApiAccessTokenAsync();
-        if (!string.IsNullOrEmpty(accessToken))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var accessToken = await GetApiAccessTokenAsync(interactiveChallenge: false);
+        if (string.IsNullOrEmpty(accessToken))
+            return Json(Array.Empty<object>());
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         var response = await client.GetAsync("/api/verification/pending-sessions");
         if (!response.IsSuccessStatusCode)
@@ -207,7 +208,7 @@ public class VerificationController : Controller
 
         return View(new HistoryViewModel { Sessions = sessions });
     }
-    private async Task<string?> GetApiAccessTokenAsync()
+    private async Task<string?> GetApiAccessTokenAsync(bool interactiveChallenge = true)
     {
         var scopes = _config.GetSection("Api:Scopes").Get<string[]>();
         if (scopes is null || scopes.Length == 0)
@@ -219,6 +220,11 @@ public class VerificationController : Controller
         try
         {
             return await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
+        }
+        catch (MicrosoftIdentityWebChallengeUserException) when (!interactiveChallenge)
+        {
+            _logger.LogInformation("Downstream API token is not available in the current user cache; skipping interactive challenge for this request.");
+            return null;
         }
         catch (MicrosoftIdentityWebChallengeUserException)
         {
