@@ -333,7 +333,7 @@ public class VerificationControllerTests
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>()))
             .Returns(Task.CompletedTask);
         _verifiedIdClient.Setup(v => v.CreatePresentationRequestAsync(
-            It.IsAny<string>(), It.IsAny<string>()))
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new PresentationRequestResult
             {
                 RequestId = "req-abc123",
@@ -345,9 +345,11 @@ public class VerificationControllerTests
 
         Assert.IsType<OkObjectResult>(result);
 
-        // The requestId must be written back to the session so the callback can correlate.
+        // The requestId and one-time callback token hash must be written back to the session.
         _sessionStore.Verify(s =>
-            s.UpdateAsync(It.Is<VerificationSession>(sess => sess.RequestId == "req-abc123")),
+            s.UpdateAsync(It.Is<VerificationSession>(sess =>
+                sess.RequestId == "req-abc123"
+                && !string.IsNullOrEmpty(sess.CallbackTokenHash))),
             Times.Once());
     }
 

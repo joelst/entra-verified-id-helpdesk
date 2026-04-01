@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
@@ -9,6 +10,7 @@ using VerifiedIdHelpdesk.Api.Controllers;
 using VerifiedIdHelpdesk.Api.Hubs;
 using VerifiedIdHelpdesk.Core.Interfaces;
 using VerifiedIdHelpdesk.Core.Models;
+using VerifiedIdHelpdesk.Infrastructure;
 
 namespace VerifiedIdHelpdesk.UnitTests;
 
@@ -28,18 +30,27 @@ public class CallbackControllerTests
     private readonly Mock<ISessionStore> _sessionStore = new();
     private readonly Mock<IHubContext<VerificationHub>> _hub = new();
     private readonly Mock<IClientProxy> _groupProxy = new();
+    private const string ValidCallbackToken = "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789";
 
     /// <summary>
     /// Creates a controller instance wired with the shared mocks.
     /// </summary>
-    private CallbackController CreateController()
+    private CallbackController CreateController(
+        bool requireCallbackJwtValidation = false,
+        bool includeApiKeyHeader = false,
+        string environmentName = "Testing")
     {
+        var configValues = new Dictionary<string, string?>
+        {
+            ["VerifiedId:TenantId"] = "00000000-0000-0000-0000-000000000000",
+            ["AzureAd:ClientId"] = "11111111-1111-1111-1111-111111111111"
+        };
+
+        if (requireCallbackJwtValidation)
+            configValues["VerifiedId:RequireCallbackJwtValidation"] = "true";
+
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["VerifiedId:TenantId"] = "00000000-0000-0000-0000-000000000000",
-                ["AzureAd:ClientId"] = "11111111-1111-1111-1111-111111111111"
-            })
+            .AddInMemoryCollection(configValues)
             .Build();
 
         var mockClients = new Mock<IHubClients>();
@@ -47,14 +58,37 @@ public class CallbackControllerTests
         _hub.Setup(h => h.Clients).Returns(mockClients.Object);
 
         var env = new Mock<IWebHostEnvironment>();
-        env.Setup(e => e.EnvironmentName).Returns("Testing");
+        env.Setup(e => e.EnvironmentName).Returns(environmentName);
 
-        return new CallbackController(
+        var controller = new CallbackController(
             _sessionStore.Object,
             _hub.Object,
             config,
             NullLogger<CallbackController>.Instance,
             env.Object);
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+
+        if (includeApiKeyHeader)
+            controller.Request.Headers["api-key"] = ValidCallbackToken;
+
+        return controller;
+    }
+
+    private CallbackController CreateControllerWithApiKeyHeader()
+    {
+        return CreateController(includeApiKeyHeader: true);
+    }
+
+    private CallbackController CreateStrictControllerWithApiKeyHeader()
+    {
+        return CreateController(
+            requireCallbackJwtValidation: true,
+            includeApiKeyHeader: true,
+            environmentName: "Production");
     }
 
     /// <summary>
@@ -202,6 +236,33 @@ public class CallbackControllerTests
     }
 
     /// <summary>
+    /// Verifies that a pending session callback is rejected when the callback requestId
+    /// does not match the requestId previously stored on the session.
+    /// </summary>
+    [Fact]
+    public async Task Callback_ReturnsUnauthorized_WhenRequestIdDoesNotMatchSession()
+    {
+        _sessionStore.Setup(s => s.GetAsync("pending-session-id"))
+            .ReturnsAsync(new VerificationSession
+            {
+                SessionId = "pending-session-id",
+                Status = "pending",
+                RequestId = "expected-request-id",
+                CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
+            });
+
+        var body = BuildCallbackBody(
+            state: "pending-session-id",
+            requestStatus: "presentation_verified",
+            requestId: "different-request-id");
+
+        var result = await CreateControllerWithApiKeyHeader().Callback(body);
+
+        Assert.IsType<UnauthorizedResult>(result);
+        _sessionStore.Verify(s => s.UpdateAsync(It.IsAny<VerificationSession>()), Times.Never());
+    }
+
+    /// <summary>
     /// Verifies idempotency for failed sessions as well — a callback arriving
     /// after a session has already failed must not revert its status.
     /// </summary>
@@ -236,7 +297,8 @@ public class CallbackControllerTests
         {
             SessionId = "pending-session-id",
             Status = "pending",
-            CallerDisplayName = "Test Caller"
+            CallerDisplayName = "Test Caller",
+            CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
         };
         _sessionStore.Setup(s => s.GetAsync("pending-session-id")).ReturnsAsync(session);
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>())).Returns(Task.CompletedTask);
@@ -252,7 +314,7 @@ public class CallbackControllerTests
             requestStatus: "presentation_verified",
             claims: claims);
 
-        var result = await CreateController().Callback(body);
+        var result = await CreateControllerWithApiKeyHeader().Callback(body);
 
         Assert.IsType<OkResult>(result);
         _sessionStore.Verify(s =>
@@ -271,7 +333,8 @@ public class CallbackControllerTests
         {
             SessionId = "pending-session-id",
             Status = "pending",
-            CallerDisplayName = "Test Caller"
+            CallerDisplayName = "Test Caller",
+            CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
         };
         _sessionStore.Setup(s => s.GetAsync("pending-session-id")).ReturnsAsync(session);
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>())).Returns(Task.CompletedTask);
@@ -286,7 +349,7 @@ public class CallbackControllerTests
             requestStatus: "presentation_verified",
             claims: claims);
 
-        await CreateController().Callback(body);
+        await CreateControllerWithApiKeyHeader().Callback(body);
 
         _sessionStore.Verify(s =>
             s.UpdateAsync(It.Is<VerificationSession>(sess =>
@@ -307,7 +370,8 @@ public class CallbackControllerTests
         {
             SessionId = "pending-session-id",
             Status = "pending",
-            CallerDisplayName = "Test Caller"
+            CallerDisplayName = "Test Caller",
+            CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
         };
         _sessionStore.Setup(s => s.GetAsync("pending-session-id")).ReturnsAsync(session);
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>())).Returns(Task.CompletedTask);
@@ -317,7 +381,7 @@ public class CallbackControllerTests
             requestStatus: "presentation_verified",
             claims: new Dictionary<string, string> { ["displayName"] = "Jane Doe" });
 
-        await CreateController().Callback(body);
+        await CreateControllerWithApiKeyHeader().Callback(body);
 
         _groupProxy.Verify(p =>
             p.SendCoreAsync("VerificationComplete", It.IsAny<object?[]>(), default),
@@ -335,7 +399,8 @@ public class CallbackControllerTests
         var session = new VerificationSession
         {
             SessionId = "pending-session-id",
-            Status = "pending"
+            Status = "pending",
+            CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
         };
         _sessionStore.Setup(s => s.GetAsync("pending-session-id")).ReturnsAsync(session);
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>())).Returns(Task.CompletedTask);
@@ -344,7 +409,7 @@ public class CallbackControllerTests
             state: "pending-session-id",
             requestStatus: "presentation_error");
 
-        var result = await CreateController().Callback(body);
+        var result = await CreateControllerWithApiKeyHeader().Callback(body);
 
         Assert.IsType<OkResult>(result);
         _sessionStore.Verify(s =>
@@ -361,7 +426,8 @@ public class CallbackControllerTests
         var session = new VerificationSession
         {
             SessionId = "pending-session-id",
-            Status = "pending"
+            Status = "pending",
+            CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
         };
         _sessionStore.Setup(s => s.GetAsync("pending-session-id")).ReturnsAsync(session);
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>())).Returns(Task.CompletedTask);
@@ -370,10 +436,105 @@ public class CallbackControllerTests
             state: "pending-session-id",
             requestStatus: "presentation_error");
 
-        await CreateController().Callback(body);
+        await CreateControllerWithApiKeyHeader().Callback(body);
 
         _groupProxy.Verify(p =>
             p.SendCoreAsync("VerificationFailed", It.IsAny<object?[]>(), default),
+            Times.Once());
+    }
+
+    [Fact]
+    public async Task Callback_ReturnsUnauthorized_WhenCallbackTokenMissing()
+    {
+        _sessionStore.Setup(s => s.GetAsync("pending-session-id"))
+            .ReturnsAsync(new VerificationSession
+            {
+                SessionId = "pending-session-id",
+                Status = "pending",
+                RequestId = "expected-request-id",
+                CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
+            });
+
+        var body = BuildCallbackBody(
+            state: "pending-session-id",
+            requestStatus: "presentation_verified",
+            requestId: "expected-request-id");
+
+        var result = await CreateController().Callback(body);
+
+        Assert.IsType<UnauthorizedResult>(result);
+        _sessionStore.Verify(s => s.UpdateAsync(It.IsAny<VerificationSession>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task Callback_RequestRetrieved_ReturnsOk_WhenStrictJwtEnabled_AndReceiptMissing()
+    {
+        _sessionStore.Setup(s => s.GetAsync("pending-session-id"))
+            .ReturnsAsync(new VerificationSession
+            {
+                SessionId = "pending-session-id",
+                Status = "pending",
+                RequestId = "expected-request-id",
+                CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
+            });
+
+        var body = BuildCallbackBody(
+            state: "pending-session-id",
+            requestStatus: "request_retrieved",
+            requestId: "expected-request-id");
+
+        var result = await CreateStrictControllerWithApiKeyHeader().Callback(body);
+
+        Assert.IsType<OkResult>(result);
+        _sessionStore.Verify(s => s.UpdateAsync(It.IsAny<VerificationSession>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task Callback_ReturnsUnauthorized_WhenStrictJwtEnabled_AndVerifiedReceiptMissing()
+    {
+        _sessionStore.Setup(s => s.GetAsync("pending-session-id"))
+            .ReturnsAsync(new VerificationSession
+            {
+                SessionId = "pending-session-id",
+                Status = "pending",
+                RequestId = "expected-request-id",
+                CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
+            });
+
+        var body = BuildCallbackBody(
+            state: "pending-session-id",
+            requestStatus: "presentation_verified",
+            requestId: "expected-request-id");
+
+        var result = await CreateStrictControllerWithApiKeyHeader().Callback(body);
+
+        Assert.IsType<UnauthorizedResult>(result);
+        _sessionStore.Verify(s => s.UpdateAsync(It.IsAny<VerificationSession>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task Callback_PresentationError_ReturnsOk_WhenStrictJwtEnabled_AndReceiptMissing()
+    {
+        var session = new VerificationSession
+        {
+            SessionId = "pending-session-id",
+            Status = "pending",
+            RequestId = "expected-request-id",
+            CallbackTokenHash = CallbackTokenProtector.Hash(ValidCallbackToken)
+        };
+        _sessionStore.Setup(s => s.GetAsync("pending-session-id")).ReturnsAsync(session);
+        _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>())).Returns(Task.CompletedTask);
+
+        var body = BuildCallbackBody(
+            state: "pending-session-id",
+            requestStatus: "presentation_error",
+            requestId: "expected-request-id");
+
+        var result = await CreateStrictControllerWithApiKeyHeader().Callback(body);
+
+        Assert.IsType<OkResult>(result);
+        _sessionStore.Verify(s =>
+            s.UpdateAsync(It.Is<VerificationSession>(sess => sess.Status == "failed")),
             Times.Once());
     }
 }

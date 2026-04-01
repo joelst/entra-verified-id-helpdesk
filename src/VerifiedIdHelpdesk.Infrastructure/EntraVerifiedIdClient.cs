@@ -56,9 +56,12 @@ public class EntraVerifiedIdClient : IVerifiedIdClient
         return new ClientCertificateCredential(tenantId, clientId, cert);
     }
 
-    public async Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl)
+    public async Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl, string callbackApiKey)
     {
         var url = "verifiableCredentials/createPresentationRequest";
+        var callbackHeaders = new Dictionary<string, string>();
+        if (!string.IsNullOrWhiteSpace(callbackApiKey))
+            callbackHeaders["api-key"] = callbackApiKey;
 
         var body = new
         {
@@ -70,7 +73,7 @@ public class EntraVerifiedIdClient : IVerifiedIdClient
             {
                 url = callbackUrl,
                 state = sessionId,
-                headers = new { }
+                headers = callbackHeaders
             },
             requestedCredentials = new[]
             {

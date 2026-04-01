@@ -142,11 +142,12 @@ public class VerificationController : ControllerBase
 
         var apiBaseUrl = _config["Api:BaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
         var callbackUrl = $"{apiBaseUrl}/api/verification/callback";
+        var callbackToken = CallbackTokenProtector.Generate();
 
         PresentationRequestResult result;
         try
         {
-            result = await _verifiedId.CreatePresentationRequestAsync(session.SessionId, callbackUrl);
+            result = await _verifiedId.CreatePresentationRequestAsync(session.SessionId, callbackUrl, callbackToken);
         }
         catch (Exception ex)
         {
@@ -155,6 +156,7 @@ public class VerificationController : ControllerBase
         }
 
         session.RequestId = result.RequestId;
+        session.CallbackTokenHash = CallbackTokenProtector.Hash(callbackToken);
         await _sessions.UpdateAsync(session);
 
         _logger.LogInformation("verification_initiated {@Event}", new

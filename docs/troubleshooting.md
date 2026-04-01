@@ -55,6 +55,18 @@ Check that `VerifiedId:DidAuthority` matches your Entra Verified ID setup. Verif
 
 Ensure the API's public URL is reachable from the internet. For local development, use a tunnel (`devtunnel`, `ngrok`). Check that the callback URL doesn't have a trailing slash mismatch.
 
+### "callback_failure" or "Unauthorized" in Microsoft Authenticator
+
+Check the API logs for one of these callback rejections:
+
+- invalid or missing callback token
+- requestId mismatch
+- invalid or missing JWT
+
+This app authenticates callbacks with a **one-time callback token** plus the stored Verified ID `requestId`.
+
+If you enabled `VerifiedId:RequireCallbackJwtValidation=true`, the API also requires a valid `receipt.id_token` on successful `presentation_verified` callbacks. Leave this setting `false` unless you have confirmed your tenant and wallet flow consistently includes that receipt JWT.
+
 ### "QR code not scanning"
 
 Ensure Microsoft Authenticator is up to date. Check that the credential type in `VerifiedId:CredentialType` matches what's configured in Entra.

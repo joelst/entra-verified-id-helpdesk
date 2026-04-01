@@ -8,6 +8,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
 using VerifiedIdHelpdesk.Api.Hubs;
 using VerifiedIdHelpdesk.Core.Interfaces;
+using VerifiedIdHelpdesk.Infrastructure;
 
 namespace VerifiedIdHelpdesk.Api.Controllers;
 
@@ -32,7 +33,8 @@ public class CallbackController : ControllerBase
         _hub = hub;
         _config = config;
         _logger = logger;
-        _requireJwtValidation = !env.IsEnvironment("Testing");
+        _requireJwtValidation = !env.IsEnvironment("Testing")
+            && _config.GetValue<bool>("VerifiedId:RequireCallbackJwtValidation");
     }
 
     [HttpPost("callback")]
@@ -40,17 +42,6 @@ public class CallbackController : ControllerBase
     public async Task<IActionResult> Callback([FromBody] JsonElement body)
     {
         _logger.LogDebug("Callback received: {Body}", body.GetRawText());
-
-        // SECURITY: Validate the callback JWT before mutating any session state.
-        // A forged POST with a valid sessionId must not be able to transition sessions.
-        var jwtValid = false;
-        if (body.TryGetProperty("receipt", out var receipt)
-            && receipt.TryGetProperty("id_token", out var idTokenEl))
-        {
-            var idToken = idTokenEl.GetString();
-            if (!string.IsNullOrEmpty(idToken))
-                jwtValid = await ValidateCallbackTokenAsync(idToken);
-        }
 
         // Extract state (sessionId) and event type
         var requestId = body.TryGetProperty("requestId", out var rid) ? rid.GetString() : null;
@@ -71,14 +62,51 @@ public class CallbackController : ControllerBase
         if (session.Status != "pending")
             return Ok();
 
-        // SECURITY: Reject state-mutating callbacks without a valid JWT.
-        // Unknown/already-processed sessions are handled above to avoid retry storms.
-        // In the Testing environment, JWT validation is skipped (no real Entra tokens available).
-        if (_requireJwtValidation && !jwtValid)
+        // SECURITY: Require the one-time callback token generated for this presentation request.
+        // The raw token is never persisted and is only shared with the Verified ID service.
+        if (!ValidateCallbackToken(session))
         {
-            _logger.LogWarning("Callback rejected — invalid or missing JWT for session {SessionId}", session.SessionId);
+            _logger.LogWarning("Callback rejected — invalid or missing callback token for session {SessionId}", session.SessionId);
             return Unauthorized();
         }
+
+        // SECURITY: Correlate the callback to the specific Verified ID request when available.
+        // This is a stable signal from the request API and avoids depending on the optional
+        // receipt payload whose format can vary by wallet/version.
+        if (!string.IsNullOrWhiteSpace(session.RequestId)
+            && !string.Equals(session.RequestId, requestId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Callback rejected — requestId mismatch for session {SessionId}. Expected {ExpectedRequestId}, received {ActualRequestId}",
+                session.SessionId,
+                session.RequestId,
+                requestId ?? "<missing>");
+            return Unauthorized();
+        }
+
+        var callbackAuthMode = "token_requestid";
+
+        // Optional hardening: when explicitly enabled, only require receipt JWT validation
+        // for the successful verification callback that would transition the session to
+        // "verified". Retrieval and error callbacks rely on the one-time callback token
+        // and requestId correlation because receipt payloads are optional and not format-stable.
+        if (_requireJwtValidation && RequiresStrictReceiptJwtValidation(requestStatus))
+        {
+            if (!TryGetReceiptIdToken(body, out var idToken) || !await ValidateCallbackTokenAsync(idToken))
+            {
+                _logger.LogWarning("Callback rejected — invalid or missing JWT for session {SessionId}", session.SessionId);
+                return Unauthorized();
+            }
+
+            callbackAuthMode = "token_requestid_receiptjwt";
+        }
+
+        _logger.LogDebug(
+            "Callback auth accepted: mode={CallbackAuthMode}, sessionId={SessionId}, requestStatus={RequestStatus}, requestId={RequestId}",
+            callbackAuthMode,
+            session.SessionId,
+            requestStatus ?? "<missing>",
+            requestId ?? "<missing>");
 
         if (requestStatus == "presentation_verified")
         {
@@ -120,6 +148,35 @@ public class CallbackController : ControllerBase
         }
 
         return Ok();
+    }
+
+    private bool ValidateCallbackToken(VerifiedIdHelpdesk.Core.Models.VerificationSession session)
+    {
+        if (!Request.Headers.TryGetValue("api-key", out var providedValues))
+            return false;
+
+        var provided = providedValues.ToString();
+        if (string.IsNullOrEmpty(provided) || string.IsNullOrEmpty(session.CallbackTokenHash))
+            return false;
+
+        return CallbackTokenProtector.Matches(provided, session.CallbackTokenHash);
+    }
+
+    private static bool TryGetReceiptIdToken(JsonElement body, out string idToken)
+    {
+        idToken = string.Empty;
+
+        if (!body.TryGetProperty("receipt", out var receipt)
+            || !receipt.TryGetProperty("id_token", out var idTokenEl))
+            return false;
+
+        idToken = idTokenEl.GetString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(idToken);
+    }
+
+    private static bool RequiresStrictReceiptJwtValidation(string? requestStatus)
+    {
+        return string.Equals(requestStatus, "presentation_verified", StringComparison.Ordinal);
     }
 
     private static Dictionary<string, string> ExtractClaims(JsonElement body)

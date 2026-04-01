@@ -134,6 +134,8 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Callback_PresentationVerified_UpdatesSessionToVerified()
     {
+        var callbackToken = CallbackTokenProtector.Generate();
+
         // Arrange — seed a pending session.
         var session = new VerificationSession
         {
@@ -147,6 +149,7 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddMinutes(10),
             RequestId = "request-id-for-callback",
+            CallbackTokenHash = CallbackTokenProtector.Hash(callbackToken)
         };
         await _factory.Sessions.CreateAsync(session);
 
@@ -170,8 +173,13 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
             }
         };
 
-        var callbackResponse = await _client.PostAsJsonAsync(
-            "/api/verification/callback", callbackBody);
+        using var callbackRequest = new HttpRequestMessage(HttpMethod.Post, "/api/verification/callback")
+        {
+            Content = JsonContent.Create(callbackBody)
+        };
+        callbackRequest.Headers.Add("api-key", callbackToken);
+
+        var callbackResponse = await _client.SendAsync(callbackRequest);
 
         // Assert — callback accepted.
         Assert.Equal(HttpStatusCode.OK, callbackResponse.StatusCode);
@@ -199,6 +207,8 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Callback_PresentationError_UpdatesSessionToFailed()
     {
+        var callbackToken = CallbackTokenProtector.Generate();
+
         var session = new VerificationSession
         {
             SessionId = Guid.NewGuid().ToString(),
@@ -211,6 +221,7 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddMinutes(10),
             RequestId = "request-id-for-failure",
+            CallbackTokenHash = CallbackTokenProtector.Hash(callbackToken)
         };
         await _factory.Sessions.CreateAsync(session);
 
@@ -221,8 +232,13 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
             requestStatus = "presentation_error",
         };
 
-        var callbackResponse = await _client.PostAsJsonAsync(
-            "/api/verification/callback", callbackBody);
+        using var callbackRequest = new HttpRequestMessage(HttpMethod.Post, "/api/verification/callback")
+        {
+            Content = JsonContent.Create(callbackBody)
+        };
+        callbackRequest.Headers.Add("api-key", callbackToken);
+
+        var callbackResponse = await _client.SendAsync(callbackRequest);
 
         Assert.Equal(HttpStatusCode.OK, callbackResponse.StatusCode);
 
