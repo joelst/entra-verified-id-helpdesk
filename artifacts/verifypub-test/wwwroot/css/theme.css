@@ -1,0 +1,307 @@
+/* =========================================================
+   theme.css — Entra Verified ID Helpdesk shared theme
+   CUSTOMIZE: Edit the :root variables to change the entire
+   color scheme without touching individual components.
+   ========================================================= */
+
+:root {
+  /* Primary brand */
+  --color-primary:        #1B2A4A;   /* deep navy — headers, nav bars, primary buttons */
+  --color-primary-dark:   #111E35;   /* darker navy — button hover, active states */
+  --color-accent:         #0078D4;   /* Microsoft blue — links, highlights, accent bars */
+  --color-accent-light:   #EBF3FC;   /* light blue tint — info boxes, selected rows */
+
+  /* Status colors */
+  --color-success:        #107C10;
+  --color-success-light:  #E8F8E8;
+  --color-error:          #CC3300;
+  --color-warning:        #8B5E00;
+
+  /* Neutral */
+  --color-text:           #2C2C2C;
+  --color-text-muted:     #6B7280;
+  --color-border:         #D0D7E0;
+  --color-surface:        #F5F7FA;
+  --color-white:          #FFFFFF;
+
+  /* Typography */
+  --font-family:          'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-size-base:       14px;
+  --font-size-lg:         16px;
+  --font-size-sm:         12px;
+
+  /* Spacing */
+  --radius:               6px;
+  --shadow:               0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Reset ─────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.site-header {
+  background: var(--color-primary);
+  border-bottom: 3px solid var(--color-accent);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+}
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+.logo { height: 32px; width: auto; overflow: hidden; }
+.app-title { color: #AABBCC; font-size: var(--font-size-lg); font-weight: 400; }
+.agent-name { margin-left: auto; color: var(--color-white); font-size: var(--font-size-sm); }
+.sign-out-btn { margin-left: 12px; font-size: var(--font-size-sm); padding: 4px 12px; }
+
+/* ── Page wrapper ───────────────────────────────────────── */
+.main-content { max-width: 800px; margin: 40px auto; padding: 0 24px; }
+
+/* ── Card ───────────────────────────────────────────────── */
+.card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  box-shadow: var(--shadow);
+}
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--color-accent);
+}
+
+/* ── Forms ──────────────────────────────────────────────── */
+.form-group { margin-bottom: 20px; }
+.form-label {
+  display: block;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 6px;
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.form-control {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: var(--font-size-base);
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-white);
+  transition: border-color 0.15s;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.12);
+}
+
+/* ── Channel options ────────────────────────────────────── */
+.channel-options { display: flex; gap: 16px; flex-wrap: wrap; }
+.channel-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-white);
+  transition: border-color 0.15s;
+}
+.channel-option:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+.channel-disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--color-primary); color: var(--color-white); }
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-dark); }
+.btn-accent { background: var(--color-accent); color: var(--color-white); }
+.btn-accent:hover { background: #006CBF; }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn-sm { padding: 5px 14px; font-size: var(--font-size-sm); }
+
+/* ── Focus indicators (accessibility) ──────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(0, 120, 212, 0.2);
+}
+.form-control:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.15);
+}
+
+/* ── Alerts ─────────────────────────────────────────────── */
+.alert {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: var(--font-size-base);
+  margin-bottom: 16px;
+}
+.alert-info    { background: var(--color-accent-light); border-left: 4px solid var(--color-accent); }
+.alert-error   { background: #FEE8E8;                   border-left: 4px solid var(--color-error); }
+.alert-warning { background: #FFF8E1;                   border-left: 4px solid #F59E0B; }
+
+/* ── Verification code display ──────────────────────────── */
+.code-display {
+  font-family: 'Courier New', monospace;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--color-primary);
+  background: var(--color-accent-light);
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius);
+  padding: 18px 32px;
+  text-align: center;
+  margin: 20px 0;
+}
+
+/* ── Verified result panel ──────────────────────────────── */
+.result-verified {
+  border-left: 5px solid var(--color-success);
+  background: var(--color-success-light);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+}
+.result-verified .result-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-success);
+}
+.result-verified .result-meta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin-top: 4px;
+  line-height: 1.8;
+}
+
+/* ── Countdown timer ────────────────────────────────────── */
+.countdown { font-size: var(--font-size-sm); color: var(--color-text-muted); text-align: center; }
+.countdown.expiring-soon { color: var(--color-error); font-weight: 600; }
+
+/* ── Directory search dropdown ──────────────────────────── */
+.search-results {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-white);
+  box-shadow: var(--shadow);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 4px;
+  position: relative;
+  z-index: 100;
+}
+.search-result-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-surface);
+}
+.search-result-item:hover { background: var(--color-accent-light); }
+.search-result-name  { font-weight: 600; color: var(--color-text); }
+.search-result-meta  { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* ── Badge ──────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.badge-pending   { background: var(--color-accent-light);  color: var(--color-accent); }
+.badge-verified  { background: var(--color-success-light); color: var(--color-success); }
+.badge-expired   { background: #F3F4F6;                    color: var(--color-text-muted); }
+.badge-failed    { background: #FEE8E8;                    color: var(--color-error); }
+
+/* ── Responsive ────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .main-content { padding: 0 12px; margin: 20px auto; }
+  .card { padding: 20px 16px; }
+  .site-header { padding: 0 12px; }
+  .app-title { font-size: var(--font-size-base); }
+  .channel-options { flex-direction: column; gap: 8px; }
+  .code-display { font-size: 24px; padding: 12px 16px; letter-spacing: 0.08em; }
+}
+
+/* ── Dark mode ─────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary:        #E8EDF4;
+    --color-primary-dark:   #FFFFFF;
+    --color-accent:         #4DA6FF;
+    --color-accent-light:   #1A2D44;
+
+    --color-success:        #4CAF50;
+    --color-success-light:  #1B3A1B;
+    --color-error:          #FF6B6B;
+    --color-warning:        #FFB74D;
+
+    --color-text:           #E0E0E0;
+    --color-text-muted:     #9CA3AF;
+    --color-border:         #3A4553;
+    --color-surface:        #121820;
+    --color-white:          #1E2A38;
+
+    --shadow:               0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .site-header {
+    background: #0D1520;
+    border-bottom-color: var(--color-accent);
+  }
+  .app-title { color: #8899AA; }
+  .code-display {
+    color: var(--color-accent);
+    background: var(--color-accent-light);
+    border-color: var(--color-accent);
+  }
+  .search-result-item:hover { background: #2A3A4A; }
+  .alert-info    { background: #1A2D44; border-left-color: var(--color-accent); }
+  .alert-error   { background: #3A1A1A; border-left-color: var(--color-error); }
+  .alert-warning { background: #3A2A1A; border-left-color: var(--color-warning); }
+  .badge-pending   { background: #1A2D44; }
+  .badge-verified  { background: #1B3A1B; }
+  .badge-expired   { background: #2A2E33; }
+  .badge-failed    { background: #3A1A1A; }
+  .sign-out-btn { border-color: rgba(255, 255, 255, 0.3); }
+}
