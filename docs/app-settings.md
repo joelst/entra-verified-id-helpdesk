@@ -132,24 +132,24 @@ These values are hardcoded in `src/VerifiedIdHelpdesk.Core/Constants.cs` and req
 
 Settings configured at deployment time via `infra/main.bicep`.
 
-| Parameter           | Default                                                | Description                                                     |
-| ------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
-| `suffix`            | *(required)*                                           | Unique suffix appended to all Azure resource names              |
-| `location`          | `resourceGroup().location`                             | Azure region for all resources                                  |
-| `tenantId`          | *(required)*                                           | Entra ID tenant GUID                                            |
-| `clientId`          | `''`                                                   | App registration client ID (set after initial registration)     |
-| `helpDeskGroupId`   | `''`                                                   | Entra security group Object ID for helpdesk agents              |
-| `corporateIpRange`  | `0.0.0.0/0`                                            | IP range for network restrictions — **restrict in production!** |
-| `credentialType`    | `EmployeeVerifiedCredential`                           | Verified credential type name                                   |
-| `didAuthority`      | *(required)*                                           | Organization's DID authority (`did:web:...`)                    |
-| `senderEmail`       | *(required)*                                           | UPN of the mailbox for sending verification codes               |
-| `senderUserId`      | *(required)*                                           | Entra Object ID of the sender account                           |
-| `skuName`           | `S1`                                                   | App Service Plan SKU                                            |
-| `storageRedundancy` | `Standard_LRS`                                         | Storage account redundancy tier                                 |
-| `certName`          | `EntraClientCert`                                      | Name of the client certificate in Key Vault                     |
+| Parameter           | Default                                                | Description                                                                       |
+| ------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `suffix`            | *(required)*                                           | Unique suffix appended to all Azure resource names                                |
+| `location`          | `resourceGroup().location`                             | Azure region for all resources                                                    |
+| `tenantId`          | *(required)*                                           | Entra ID tenant GUID                                                              |
+| `clientId`          | `''`                                                   | App registration client ID (set after initial registration)                       |
+| `helpDeskGroupId`   | `''`                                                   | Entra security group Object ID for helpdesk agents                                |
+| `corporateIpRange`  | `0.0.0.0/0`                                            | IP range for network restrictions — **restrict in production!**                   |
+| `credentialType`    | `EmployeeVerifiedCredential`                           | Verified credential type name                                                     |
+| `didAuthority`      | *(required)*                                           | Organization's DID authority (`did:web:...`)                                      |
+| `senderEmail`       | *(required)*                                           | UPN of the mailbox for sending verification codes                                 |
+| `senderUserId`      | *(required)*                                           | Entra Object ID of the sender account                                             |
+| `skuName`           | `S1`                                                   | App Service Plan SKU                                                              |
+| `storageRedundancy` | `Standard_LRS`                                         | Storage account redundancy tier                                                   |
+| `certName`          | `EntraClientCert`                                      | Name of the client certificate in Key Vault                                       |
 | `keyVaultName`      | `''`                                                   | Optional custom Key Vault name if the default `kv-<suffix>` name is already taken |
-| `repoUrl`           | `https://github.com/joelst/entra-verified-id-helpdesk` | GitHub repository URL for App Service deployment                |
-| `repoBranch`        | `main`                                                 | Git branch for App Service deployment                           |
+| `repoUrl`           | `https://github.com/joelst/entra-verified-id-helpdesk` | GitHub repository URL for App Service deployment                                  |
+| `repoBranch`        | `main`                                                 | Git branch for App Service deployment                                             |
 
 ---
 

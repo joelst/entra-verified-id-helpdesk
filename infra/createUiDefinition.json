@@ -45,13 +45,34 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "S1 — Standard (recommended for dev/test, ~$73/mo)", "value": "S1" },
-                { "label": "S2 — Standard medium (~$146/mo)", "value": "S2" },
-                { "label": "S3 — Standard large (~$292/mo)", "value": "S3" },
-                { "label": "P0v3 — Premium V3 small (cheapest Premium, ~$61/mo)", "value": "P0v3" },
-                { "label": "P1v3 — Premium V3 (production, ~$123/mo)", "value": "P1v3" },
-                { "label": "P2v3 — Premium V3 large (high-traffic, ~$246/mo)", "value": "P2v3" },
-                { "label": "B2 — Basic (requires Basic VM quota, ~$75/mo)", "value": "B2" }
+                {
+                  "label": "S1 — Standard (recommended for dev/test, ~$73/mo)",
+                  "value": "S1"
+                },
+                {
+                  "label": "S2 — Standard medium (~$146/mo)",
+                  "value": "S2"
+                },
+                {
+                  "label": "S3 — Standard large (~$292/mo)",
+                  "value": "S3"
+                },
+                {
+                  "label": "P0v3 — Premium V3 small (cheapest Premium, ~$61/mo)",
+                  "value": "P0v3"
+                },
+                {
+                  "label": "P1v3 — Premium V3 (production, ~$123/mo)",
+                  "value": "P1v3"
+                },
+                {
+                  "label": "P2v3 — Premium V3 large (high-traffic, ~$246/mo)",
+                  "value": "P2v3"
+                },
+                {
+                  "label": "B2 — Basic (requires Basic VM quota, ~$75/mo)",
+                  "value": "B2"
+                }
               ]
             }
           },
@@ -64,9 +85,18 @@
             "constraints": {
               "required": true,
               "allowedValues": [
-                { "label": "LRS — Locally redundant (dev/test)", "value": "Standard_LRS" },
-                { "label": "ZRS — Zone redundant (recommended for production)", "value": "Standard_ZRS" },
-                { "label": "GRS — Geo redundant (highest resilience)", "value": "Standard_GRS" }
+                {
+                  "label": "LRS — Locally redundant (dev/test)",
+                  "value": "Standard_LRS"
+                },
+                {
+                  "label": "ZRS — Zone redundant (recommended for production)",
+                  "value": "Standard_ZRS"
+                },
+                {
+                  "label": "GRS — Geo redundant (highest resilience)",
+                  "value": "Standard_GRS"
+                }
               ]
             }
           },
@@ -277,21 +307,21 @@
       }
     ],
     "outputs": {
-      "suffix":             "[basics('suffix')]",
-      "location":           "[location()]",
-      "tenantId":           "[steps('entraId').tenantId]",
-      "clientId":           "[steps('entraId').clientId]",
-      "helpDeskGroupId":    "[steps('entraId').helpDeskGroupId]",
-      "certName":           "[steps('entraId').certName]",
-      "corporateIpRange":   "[steps('infrastructure').corporateIpRange]",
-      "credentialType":     "[steps('verifiedId').credentialType]",
-      "didAuthority":       "[steps('verifiedId').didAuthority]",
-      "senderEmail":        "[steps('notifications').senderEmail]",
-      "senderUserId":       "[steps('notifications').senderUserId]",
-      "skuName":            "[steps('infrastructure').skuName]",
-      "storageRedundancy":  "[steps('infrastructure').storageRedundancy]",
+      "suffix": "[basics('suffix')]",
+      "location": "[location()]",
+      "tenantId": "[steps('entraId').tenantId]",
+      "clientId": "[steps('entraId').clientId]",
+      "helpDeskGroupId": "[steps('entraId').helpDeskGroupId]",
+      "certName": "[steps('entraId').certName]",
+      "corporateIpRange": "[steps('infrastructure').corporateIpRange]",
+      "credentialType": "[steps('verifiedId').credentialType]",
+      "didAuthority": "[steps('verifiedId').didAuthority]",
+      "senderEmail": "[steps('notifications').senderEmail]",
+      "senderUserId": "[steps('notifications').senderUserId]",
+      "skuName": "[steps('infrastructure').skuName]",
+      "storageRedundancy": "[steps('infrastructure').storageRedundancy]",
       "storageAccountName": "[steps('infrastructure').storageAccountName]",
-      "keyVaultName":       "[steps('infrastructure').keyVaultName]"
+      "keyVaultName": "[steps('infrastructure').keyVaultName]"
     }
   }
 }
