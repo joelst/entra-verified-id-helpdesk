@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 using System.Text.Json;
@@ -49,7 +50,9 @@ public class VerificationController : ControllerBase
         if (!string.IsNullOrEmpty(request.Note) && request.Note.Length > 500)
             return BadRequest("Note must be 500 characters or fewer.");
 
-        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
         var agentDisplayName = User.FindFirstValue("name") ?? User.Identity?.Name ?? agentEntraId;
 
         var pendingCount = await _sessions.CountPendingByAgentAsync(agentEntraId);
@@ -75,7 +78,7 @@ public class VerificationController : ControllerBase
             DeliveryChannel = request.DeliveryChannel.ToLowerInvariant(),
             Status = "pending",
             CreatedAt = now,
-            ExpiresAt = now.AddMinutes(Constants.CodeExpiryMinutes)
+            ExpiresAt = now.AddMinutes(Math.Clamp(_config.GetValue("VerifiedId:CodeExpiryMinutes", Constants.CodeExpiryMinutes), 1, 60))
         };
 
         await _sessions.CreateAsync(session);
@@ -111,6 +114,7 @@ public class VerificationController : ControllerBase
     }
 
     [HttpPost("initiate")]
+    [EnableRateLimiting("initiate")]
     public async Task<IActionResult> Initiate([FromBody] InitiateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
@@ -186,18 +190,65 @@ public class VerificationController : ControllerBase
     }
 
     [HttpGet("public-status/{sessionId}")]
+    [EnableRateLimiting("public-status")]
     public async Task<IActionResult> PublicStatus(string sessionId)
     {
         var session = await _sessions.GetAsync(sessionId);
         if (session == null) return NotFound();
 
-        // Return status + verified claims (sessionId is a non-guessable GUID)
+        // SECURITY: Public endpoint — return status only, never PII or verified claims.
         return Ok(new
         {
             status = session.Status,
-            verifiedClaims = session.VerifiedClaims,
             verifiedAt = session.VerifiedAt
         });
+    }
+
+    /// <summary>Returns all pending sessions for the authenticated agent.</summary>
+    [HttpGet("pending-sessions")]
+    [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
+    public async Task<IActionResult> PendingSessions()
+    {
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
+
+        var sessions = await _sessions.GetPendingByAgentAsync(agentEntraId);
+        return Ok(sessions.Select(s => new
+        {
+            s.SessionId,
+            s.CallerDisplayName,
+            s.CallerEmail,
+            s.TicketId,
+            s.DeliveryChannel,
+            s.ExpiresAt,
+            s.CreatedAt
+        }));
+    }
+
+    [HttpGet("my-sessions")]
+    [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
+    public async Task<IActionResult> MySessions([FromQuery] int limit = 50)
+    {
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
+
+        var sessions = await _sessions.GetByAgentAsync(agentEntraId, Math.Clamp(limit, 1, 100));
+
+        var result = sessions.Select(s => new
+        {
+            sessionId = s.SessionId,
+            callerDisplayName = s.CallerDisplayName,
+            callerEmail = s.CallerEmail,
+            ticketId = s.TicketId,
+            deliveryChannel = s.DeliveryChannel,
+            status = s.Status,
+            createdAt = s.CreatedAt,
+            verifiedAt = s.VerifiedAt
+        });
+
+        return Ok(result);
     }
 
     private static string MaskEmail(string email)

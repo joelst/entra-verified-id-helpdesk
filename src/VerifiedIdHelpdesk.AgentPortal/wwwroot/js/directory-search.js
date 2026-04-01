@@ -1,5 +1,7 @@
 // ── Directory search typeahead ────────────────────────────────────────
 let searchTimeout;
+let abortController;
+const searchCache = new Map();
 
 document.getElementById('callerSearch').addEventListener('input', function () {
     clearTimeout(searchTimeout);
@@ -8,22 +10,42 @@ document.getElementById('callerSearch').addEventListener('input', function () {
         hideResults();
         return;
     }
-    searchTimeout = setTimeout(() => searchDirectory(query), 300);
+    searchTimeout = setTimeout(() => searchDirectory(query), 400); // 400ms balances UX with server load
 });
 
 async function searchDirectory(query) {
+    if (searchCache.has(query)) {
+        renderResults(searchCache.get(query));
+        return;
+    }
+
+    if (abortController) abortController.abort();
+    abortController = new AbortController();
+
     try {
+        const container = document.getElementById('searchResults');
+        container.innerHTML = '<div class="search-result-item" style="color:var(--color-text-muted);cursor:default;"><span class="spinner"></span> Searching...</div>';
+        container.style.display = 'block';
+
         const resp = await fetch(`/api/directory/search?q=${encodeURIComponent(query)}`, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            signal: abortController.signal
         });
         if (!resp.ok) {
+            if (resp.status === 429) {
+                renderNoResults('Too many searches — please wait a moment and try again.');
+                return;
+            }
             console.error('Directory search returned', resp.status);
             renderNoResults('Directory search unavailable. You can enter details manually below.');
             return;
         }
         const results = await resp.json();
+        searchCache.set(query, results);
+        if (searchCache.size > 50) searchCache.delete(searchCache.keys().next().value);
         renderResults(results);
     } catch (e) {
+        if (e.name === 'AbortError') return;
         console.error('Directory search failed:', e);
         renderNoResults('Directory search unavailable. You can enter details manually below.');
     }
@@ -99,4 +121,13 @@ function esc(str) {
 document.addEventListener('click', (e) => {
     if (!e.target.closest('#callerSearch') && !e.target.closest('#searchResults'))
         hideResults();
+});
+
+// ── Form submission loading state ────────────────────────────────────
+document.querySelector('form[method="post"]')?.addEventListener('submit', function () {
+    const btn = document.getElementById('submitBtn');
+    if (btn && !btn.disabled) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Sending...';
+    }
 });

@@ -442,12 +442,11 @@ public class VerificationControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
 
-        // Status is present so the UI can redirect on success.
+        // Status must be present
         Assert.Contains("verified", json);
-
-        // PII from VerifiedClaims must never appear in the public response.
+        // PII must NOT leak through the public endpoint
+        Assert.DoesNotContain("verifiedClaims", json);
         Assert.DoesNotContain("Jane Doe", json);
         Assert.DoesNotContain("EMP-999", json);
-        Assert.DoesNotContain("verifiedClaims", json);
     }
 }

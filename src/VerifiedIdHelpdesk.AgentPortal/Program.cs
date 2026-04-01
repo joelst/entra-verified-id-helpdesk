@@ -60,22 +60,32 @@ builder.Services.AddHttpClient("ApiClient", (sp, client) =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
     client.BaseAddress = new Uri(config["Api:BaseUrl"]!);
-});
+}).AddStandardResilienceHandler();
 
 // ── MVC + Identity UI ─────────────────────────────────────────────────────
 builder.Services.AddControllersWithViews()
     .AddMicrosoftIdentityUI();
 
 builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddMemoryCache();
+builder.Services.AddHealthChecks();
+
+// SECURITY: Enforce secure cookie defaults
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;
+});
 
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Verification/Error");
-    // SECURITY: HSTS enforces HTTPS for 1 year. Do not change the max-age below 31536000 in production.
     app.UseHsts();
 }
+app.UseStatusCodePagesWithReExecute("/Verification/Error");
 
 // Security headers — applied before any response is written
 app.Use(async (context, next) =>
@@ -85,13 +95,17 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Referrer-Policy", "strict-origin");
     var apiBaseUrl = app.Configuration["Api:BaseUrl"] ?? "";
     context.Response.Headers.Append("Content-Security-Policy",
-        $"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
+        $"default-src 'self'; script-src 'self'; " +
         $"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
         $"connect-src 'self' {apiBaseUrl} wss://{new Uri(apiBaseUrl).Host};");
+    context.Response.Headers.Append("Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Append("X-Permitted-Cross-Domain-Policies", "none");
     await next();
 });
 
 app.UseHttpsRedirection();
+app.UseCookiePolicy();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -105,5 +119,6 @@ app.MapControllerRoute(
 app.MapControllerRoute(
     name: "MicrosoftIdentity",
     pattern: "MicrosoftIdentity/{controller=Account}/{action=SignIn}");
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();

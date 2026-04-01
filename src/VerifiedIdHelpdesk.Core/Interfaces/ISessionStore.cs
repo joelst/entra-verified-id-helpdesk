@@ -39,4 +39,16 @@ public interface ISessionStore
     /// Called by the background <c>SessionExpiryService</c> every 2 minutes.
     /// </summary>
     Task<int> ExpireOldSessionsAsync();
+
+    /// <summary>
+    /// Returns recent sessions for the given agent, ordered by creation time descending.
+    /// Used for the agent's verification history page.
+    /// </summary>
+    Task<IReadOnlyList<VerificationSession>> GetByAgentAsync(string agentEntraId, int limit = 50);
+
+    /// <summary>
+    /// Returns all currently pending sessions for the given agent.
+    /// Used for the concurrent sessions dashboard.
+    /// </summary>
+    Task<IReadOnlyList<VerificationSession>> GetPendingByAgentAsync(string agentEntraId);
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Graph;
 
 namespace VerifiedIdHelpdesk.AgentPortal.Controllers;
@@ -10,25 +11,34 @@ namespace VerifiedIdHelpdesk.AgentPortal.Controllers;
 public class DirectoryController : ControllerBase
 {
     private readonly GraphServiceClient _graph;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<DirectoryController> _logger;
 
-    public DirectoryController(GraphServiceClient graph, ILogger<DirectoryController> logger)
+    public DirectoryController(GraphServiceClient graph, IMemoryCache cache, ILogger<DirectoryController> logger)
     {
         _graph = graph;
+        _cache = cache;
         _logger = logger;
     }
 
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string q)
     {
-        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2 || q.Length > 50)
             return Ok(Array.Empty<object>());
+
+        // SECURITY: Sanitize search input — strip double quotes to prevent Graph search syntax injection.
+        var sanitizedQuery = q.Replace("\"", "");
+        var cacheKey = $"dir-search:{sanitizedQuery.ToLowerInvariant()}";
+
+        if (_cache.TryGetValue(cacheKey, out object? cached))
+            return Ok(cached);
 
         try
         {
             var users = await _graph.Users.GetAsync(req =>
             {
-                req.QueryParameters.Search = $"\"displayName:{q}\" OR \"mail:{q}\"";
+                req.QueryParameters.Search = $"\"displayName:{sanitizedQuery}\" OR \"mail:{sanitizedQuery}\"";
                 req.QueryParameters.Select = ["id", "displayName", "mail", "department", "jobTitle"];
                 req.QueryParameters.Top = 10;
                 req.QueryParameters.Orderby = ["displayName"];
@@ -43,7 +53,13 @@ public class DirectoryController : ControllerBase
                 email = u.Mail,
                 department = u.Department,
                 jobTitle = u.JobTitle
-            }) ?? [];
+            }).ToList() ?? [];
+
+            _cache.Set(cacheKey, results, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30),
+                SlidingExpiration = TimeSpan.FromSeconds(15)
+            });
 
             return Ok(results);
         }

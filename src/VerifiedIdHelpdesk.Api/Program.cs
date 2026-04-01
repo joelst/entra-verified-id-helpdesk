@@ -1,7 +1,10 @@
 using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Identity.Web;
+using Swashbuckle.AspNetCore.SwaggerGen;
+using System.Threading.RateLimiting;
 using VerifiedIdHelpdesk.Core;
 using VerifiedIdHelpdesk.Core.Interfaces;
 using VerifiedIdHelpdesk.Infrastructure;
@@ -68,14 +71,99 @@ if (!builder.Environment.IsEnvironment("Testing"))
 }
 
 builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
+
+// SECURITY: Enforce secure cookie defaults
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+});
+
+// Health checks
+builder.Services.AddHealthChecks();
+
+// OpenAPI / Swagger — Development only (see middleware below)
+builder.Services.AddEndpointsApiExplorer();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+        {
+            Title = "Verified ID Helpdesk API",
+            Version = "v1",
+            Description = "Backend API for the Entra Verified ID Helpdesk"
+        });
+    });
+}
+
+// Rate limiting — protect public endpoints from abuse
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // /api/verification/initiate — 10 requests/minute per IP
+    options.AddPolicy("initiate", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // /api/verification/public-status — 60 requests/minute per IP
+    options.AddPolicy("public-status", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // /api/verification/callback — 30 requests/minute per IP
+    options.AddPolicy("callback", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
 
 var app = builder.Build();
 
+// Swagger UI — Development only (exposes API schema, never enable in production)
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin");
+    context.Response.Headers.Append("Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Append("X-Permitted-Cross-Domain-Policies", "none");
+    await next();
+});
+
 app.UseCors("AllowPortals");
+app.UseRateLimiter();
 app.UseHttpsRedirection();
+app.UseCookiePolicy();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 app.MapHub<VerificationHub>(CoreConstants.VerificationHubPath);
 app.Run();
 
