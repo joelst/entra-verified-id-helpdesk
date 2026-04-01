@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.4.0" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.6.0" />
     <PackageReference Include="Microsoft.Identity.Web.UI" Version="4.6.0" />
     <PackageReference Include="Microsoft.Graph" Version="5.103.0" />

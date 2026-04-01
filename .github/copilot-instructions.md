@@ -56,11 +56,22 @@ Group-based access via Entra security group configured in `AuthorizationGroups:H
 
 - **Never store or log the plaintext code.** Only `HMAC-SHA256(code, hmacKey)` is persisted. The plaintext is returned to the agent once, then discarded.
 - **Use `RandomNumberGenerator`** for code generation — never `System.Random` or `Guid`.
-- **Validate webhook JWT signatures** on every Entra Verified ID callback before touching the database.
+- **Validate webhook JWT signatures** on every Entra Verified ID callback before touching the database. JWT validation is **required** before any session state mutation — not optional defense-in-depth.
 - **All secrets from Key Vault** via `DefaultAzureCredential` and Managed Identity. No secrets in appsettings, env vars, or code.
 - **Generic error messages** to public-facing endpoints — never expose internal details.
 - **Rate limits**: max 5 failed code attempts per session, max 3 concurrent pending sessions per agent.
 - **Idempotent callbacks**: check session status before updating; duplicate webhooks must not double-process.
+
+### Post-Change Security Checklist
+
+After any code change, verify these invariants. These are the most common regression patterns:
+
+1. **Public endpoints must never return PII.** The `PublicStatus` endpoint (`/api/verification/public-status`) returns only `status` and `verifiedAt` — never `verifiedClaims`, email addresses, or caller details. Any new public endpoint must follow this rule.
+2. **AgentPortal→Api proxy calls must forward bearer tokens.** Every controller action that calls the Backend API must acquire an OBO access token via `GetApiAccessTokenAsync()` and set the `Authorization` header. Missing tokens cause silent 401s that surface as empty/broken UI.
+3. **Add `[AuthorizeForScopes]`** to every AgentPortal action that acquires tokens, so MSAL re-auth works when the token cache is empty.
+4. **Never use null-forgiving (`!`) on claim resolution.** Always validate `User.FindFirstValue("oid")` and return `Unauthorized()` if null. The `!` operator turns a missing claim into a 500 instead of a clean 401.
+5. **Webhook callbacks must validate JWT before state mutation.** A forged POST with a guessable or leaked session ID must not transition sessions. Return `200 OK` for unknown/already-processed sessions (to prevent retry storms), but `401` for pending sessions with invalid/missing JWTs.
+6. **Tests must assert the negative.** Security tests should verify that data is *absent* (e.g., `Assert.DoesNotContain("verifiedClaims")`), not just that the response succeeds. A test that asserts PII *is present* on a public endpoint bakes in a PII leak.
 
 ### Configuration
 
