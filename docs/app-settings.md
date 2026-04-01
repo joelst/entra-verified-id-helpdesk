@@ -86,10 +86,10 @@ Cross-app URLs used for CORS, redirects, API calls, and Verified ID callback URL
 
 ### Notifications
 
-| Setting                      | Used By | Description                                        | Example Value                          |
-| ---------------------------- | ------- | -------------------------------------------------- | -------------------------------------- |
-| `Notifications:SenderEmail`  | Api     | UPN of the mailbox used to send verification codes | `helpdesk@contoso.com`                 |
-| `Notifications:SenderUserId` | Api     | Entra Object ID of the sender account              | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| Setting                      | Used By | Description                                                                                  | Example Value                          |
+| ---------------------------- | ------- | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `Notifications:SenderEmail`  | Api     | UPN of the mailbox used to send verification codes and the current email fallback path       | `helpdesk@contoso.com`                 |
+| `Notifications:SenderUserId` | Api     | Optional. Entra Object ID of the sender account; only needed if Teams delivery is re-enabled | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 
 ### Telemetry
 
@@ -163,7 +163,7 @@ The Api is the most configuration-intensive app. It owns all business logic and 
 - `AzureAd:Instance`, `AzureAd:TenantId`, `AzureAd:ClientId`
 - `AzureAd:ClientCertificates:0:SourceType`, `AzureAd:ClientCertificates:0:KeyVaultUrl`, `AzureAd:ClientCertificates:0:KeyVaultCertificateName`
 - `KeyVault:Uri`
-- `VerifiedId:TenantId`, `VerifiedId:ClientId`, `VerifiedId:DidAuthority`, `VerifiedId:CredentialType`, `VerifiedId:RequestServiceBaseUrl`, `VerifiedId:RequireCallbackJwtValidation`, `VerifiedId:EnrollmentUrl`
+- `VerifiedId:TenantId`, `VerifiedId:ClientId`, `VerifiedId:DidAuthority`, `VerifiedId:CredentialType`, `VerifiedId:RequestServiceBaseUrl`, `VerifiedId:RequireCallbackJwtValidation`
 - `Storage:AccountUri`
 - `AuthorizationGroups:HelpDeskAgents`
 - `AgentPortal:BaseUrl`, `VerifyPortal:BaseUrl`, `Api:BaseUrl`
@@ -189,4 +189,5 @@ The simplest configuration — no authentication, no direct storage access.
 
 - `KeyVault:Uri`
 - `Api:BaseUrl`
+- `VerifiedId:EnrollmentUrl`
 - `ApplicationInsights:ConnectionString`

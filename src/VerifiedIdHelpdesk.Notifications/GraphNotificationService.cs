@@ -27,7 +27,16 @@ public class GraphNotificationService : INotificationService
 
     public async Task SendCodeAsync(string recipientEmail, string displayCode, DateTime expiresAt, string channel)
     {
-        switch (channel.ToLowerInvariant())
+        var effectiveChannel = NormalizeChannel(channel);
+
+        if (!string.Equals(effectiveChannel, channel, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Teams delivery is temporarily disabled; falling back to email for {Email}",
+                MaskEmail(recipientEmail));
+        }
+
+        switch (effectiveChannel)
         {
             case "email":
                 await SendEmailAsync(recipientEmail, displayCode, expiresAt);
@@ -39,6 +48,16 @@ public class GraphNotificationService : INotificationService
                 _logger.LogWarning("Unsupported delivery channel: {Channel}", channel);
                 throw new NotSupportedException($"Delivery channel '{channel}' is not supported.");
         }
+    }
+
+    private static string NormalizeChannel(string channel)
+    {
+        if (string.Equals(channel, "teams", StringComparison.OrdinalIgnoreCase))
+        {
+            return "email";
+        }
+
+        return channel.ToLowerInvariant();
     }
 
     private async Task SendEmailAsync(string recipientEmail, string displayCode, DateTime expiresAt)

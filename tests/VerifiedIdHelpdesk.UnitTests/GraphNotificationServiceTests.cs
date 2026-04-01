@@ -14,6 +14,20 @@ namespace VerifiedIdHelpdesk.UnitTests;
 public class GraphNotificationServiceTests
 {
   [Fact]
+  public void NormalizeChannel_Teams_FallsBackToEmail()
+  {
+    var method = typeof(GraphNotificationService).GetMethod(
+        "NormalizeChannel",
+        BindingFlags.NonPublic | BindingFlags.Static);
+
+    Assert.NotNull(method);
+
+    var effectiveChannel = Assert.IsType<string>(method!.Invoke(null, ["teams"]));
+
+    Assert.Equal("email", effectiveChannel);
+  }
+
+  [Fact]
   public void BuildTeamsMessageHtml_ReturnsHtmlWithPortalUrlAndCode()
   {
     var expiresAt = new DateTime(2026, 03, 31, 23, 45, 00, DateTimeKind.Utc);

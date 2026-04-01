@@ -97,6 +97,10 @@ Check that the `User.Read.All` application permission is granted and admin-conse
 
 Check that the `Mail.Send` permission is granted and admin-consented. Verify that `Notifications:SenderEmail` is a valid mailbox UPN.
 
+### "I selected Teams but the code arrived by email"
+
+This is currently expected. Teams delivery is temporarily disabled, and any remaining `teams` requests are intentionally routed through the email notification path instead. Re-enable the Teams option in the Agent Portal and the `SendTeamsMessageAsync` path only after you are ready to turn that integration back on.
+
 ## Session Issues
 
 ### "Code expired immediately"
