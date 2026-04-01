@@ -13,11 +13,13 @@ public class IndexModel : PageModel
 
     public string? ErrorMessage { get; private set; }
     public string Email { get; private set; } = string.Empty;
+    public string EnrollmentUrl { get; }
 
-    public IndexModel(IHttpClientFactory httpClientFactory, ILogger<IndexModel> logger)
+    public IndexModel(IHttpClientFactory httpClientFactory, ILogger<IndexModel> logger, IConfiguration config)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        EnrollmentUrl = config["VerifiedId:EnrollmentUrl"] ?? string.Empty;
     }
 
     public void OnGet() { }

@@ -40,6 +40,9 @@ param credentialType string = 'EmployeeVerifiedCredential'
 @description('DID authority for your Verified ID tenant, e.g. "did:web:yourdomain.com".')
 param didAuthority string
 
+@description('Optional public URL where callers can create or obtain your organization\'s Verified ID before starting verification.')
+param verifiedIdEnrollmentUrl string = ''
+
 @description('UPN of the mailbox used to send email notifications via Microsoft Graph.')
 param senderEmail string
 
@@ -319,6 +322,7 @@ resource verifyApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'KeyVault__Uri', value: keyVault.properties.vaultUri }
         { name: 'Api__BaseUrl', value: apiBaseUrl }
+        { name: 'VerifiedId__EnrollmentUrl', value: verifiedIdEnrollmentUrl }
         // Oryx build
         { name: 'PROJECT', value: 'src/VerifiedIdHelpdesk.VerifyPortal/VerifiedIdHelpdesk.VerifyPortal.csproj' }
         { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }

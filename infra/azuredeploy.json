@@ -62,6 +62,13 @@
         "description": "DID authority for your Verified ID tenant, e.g. \"did:web:yourdomain.com\"."
       }
     },
+    "verifiedIdEnrollmentUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional public URL where callers can create or obtain your organization's Verified ID before starting verification."
+      }
+    },
     "senderEmail": {
       "type": "string",
       "metadata": {
@@ -473,6 +480,10 @@
             {
               "name": "Api__BaseUrl",
               "value": "[variables('apiBaseUrl')]"
+            },
+            {
+              "name": "VerifiedId__EnrollmentUrl",
+              "value": "[parameters('verifiedIdEnrollmentUrl')]"
             },
             {
               "name": "PROJECT",

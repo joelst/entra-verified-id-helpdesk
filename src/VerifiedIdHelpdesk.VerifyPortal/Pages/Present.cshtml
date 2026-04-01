@@ -4,9 +4,7 @@
     ViewData["Title"] = "Present Your Credential";
 }
 
-<div class="card" id="presentData"
-     data-session-id="@Model.SessionId"
-     data-api-base-url="@Model.ApiBaseUrl"
+<div class="card" id="presentData" data-session-id="@Model.SessionId" data-api-base-url="@Model.ApiBaseUrl"
      data-expires-at="@Model.ExpiresAt.ToUniversalTime().ToString("O")">
     <div class="card-title">Present Your Credential</div>
 
@@ -14,6 +12,15 @@
         Open <strong>Microsoft Authenticator</strong> on your phone and scan the QR code below,
         or tap the button to open Authenticator directly.
     </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.EnrollmentUrl))
+    {
+        <div class="alert alert-warning">
+            Don’t have your Verified ID yet?
+            <a href="@Model.EnrollmentUrl" target="_blank" rel="noopener noreferrer">Create it here</a>,
+            then return to this page to continue.
+        </div>
+    }
 
     @if (!string.IsNullOrEmpty(Model.QrCodeUri))
     {
