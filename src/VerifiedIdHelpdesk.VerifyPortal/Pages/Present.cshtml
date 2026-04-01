@@ -2,10 +2,12 @@
 @model PresentModel
 @{
     ViewData["Title"] = "Present Your Credential";
+    var enrollmentUrl = Model.EnrollmentUrl;
+    var expiresAtIso = Model.ExpiresAt.ToUniversalTime().ToString("O");
 }
 
 <div class="card" id="presentData" data-session-id="@Model.SessionId" data-api-base-url="@Model.ApiBaseUrl"
-     data-expires-at="@Model.ExpiresAt.ToUniversalTime().ToString("O")">
+     data-expires-at="@expiresAtIso">
     <div class="card-title">Present Your Credential</div>
 
     <div class="alert alert-info">
@@ -13,12 +15,14 @@
         or tap the button to open Authenticator directly.
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(Model.EnrollmentUrl))
+    @if (!string.IsNullOrWhiteSpace(enrollmentUrl))
     {
         <div class="alert alert-warning">
-            Don’t have your Verified ID yet?
-            <a href="@Model.EnrollmentUrl" target="_blank" rel="noopener noreferrer">Create it here</a>,
-            then return to this page to continue.
+            <p>Don't have your Verified ID yet?</p>
+            <p>
+                <a href="@enrollmentUrl" target="_blank" rel="noopener noreferrer">Create it here</a>,
+                then return to this page to continue.
+            </p>
         </div>
     }
 

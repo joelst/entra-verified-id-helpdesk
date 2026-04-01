@@ -2,6 +2,7 @@
 @model IndexModel
 @{
     ViewData["Title"] = "Verify Your Identity";
+    var enrollmentUrl = Model.EnrollmentUrl;
 }
 
 <div class="card">
@@ -9,11 +10,13 @@
 
     <p>Your helpdesk agent has given you a verification code. Enter your work email and the code below.</p>
 
-    @if (!string.IsNullOrWhiteSpace(Model.EnrollmentUrl))
+    @if (!string.IsNullOrWhiteSpace(enrollmentUrl))
     {
         <div class="alert alert-info">
-            Need to create or install your organization's Verified ID in Microsoft Authenticator first?
-            <a href="@Model.EnrollmentUrl" target="_blank" rel="noopener noreferrer">Create your Verified ID</a>.
+            <p>Need to create or install your organization's Verified ID in Microsoft Authenticator first?</p>
+            <p>
+                <a href="@enrollmentUrl" target="_blank" rel="noopener noreferrer">Create your Verified ID</a>
+            </p>
         </div>
     }
 

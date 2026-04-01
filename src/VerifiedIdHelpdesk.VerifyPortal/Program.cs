@@ -4,8 +4,12 @@ using Azure.Extensions.AspNetCore.Configuration.Secrets;
 var builder = WebApplication.CreateBuilder(args);
 
 var keyVaultUri = builder.Configuration["KeyVault:Uri"];
-if (!string.IsNullOrEmpty(keyVaultUri))
-    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+if (Uri.TryCreate(keyVaultUri, UriKind.Absolute, out var parsedKeyVaultUri)
+    && !parsedKeyVaultUri.Host.Contains('<')
+    && !parsedKeyVaultUri.Host.Contains('>'))
+{
+    builder.Configuration.AddAzureKeyVault(parsedKeyVaultUri, new DefaultAzureCredential());
+}
 
 builder.Services.AddRazorPages();
 
@@ -68,3 +72,5 @@ app.MapRazorPages();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+public partial class Program { }
