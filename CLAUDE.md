@@ -91,7 +91,7 @@ All secrets come from Azure Key Vault via Managed Identity. No secrets in appset
     "TenantId": "<your-tenant-id>",
     "ClientId": "<app-registration-client-id>",
     "DidAuthority": "did:web:<your-did-domain>",
-    "CredentialType": "EmployeeVerifiedCredential",
+    "CredentialType": "VerifiedEmployee",
     "RequestServiceBaseUrl": "https://verifiedid.did.msidentity.com/v1.0/"
   },
   "Storage": {
@@ -268,7 +268,7 @@ Base URL: `https://verifiedid.did.msidentity.com/v1.0/{tenantId}/verifiableCrede
 **Presentation endpoint:** `POST /createPresentationRequest`
 - Include `callbackUrl` pointing to `/api/verification/callback`
 - Include a one-time callback token in the callback headers and persist only its hash with the session
-- Include `requestedCredentials` array specifying the `EmployeeVerifiedCredential` type
+- Include `requestedCredentials` array specifying the `VerifiedEmployee` type
 - Returns a `requestId`, a QR code URL, and a deep link (`openid-vc://...`)
 
 Authentication: use `DefaultAzureCredential` to acquire a token for scope `3db474b9-6a0c-4840-96ac-1fceb342124f/.default` (Verifiable Credentials service).

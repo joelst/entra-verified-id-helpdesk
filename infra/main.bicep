@@ -35,7 +35,7 @@ param helpDeskGroupId string = ''
 param corporateIpRange string = '0.0.0.0/0'
 
 @description('Verifiable credential type name defined in your Entra Verified ID tenant.')
-param credentialType string = 'EmployeeVerifiedCredential'
+param credentialType string = 'VerifiedEmployee'
 
 @description('DID authority for your Verified ID tenant, e.g. "did:web:yourdomain.com".')
 param didAuthority string

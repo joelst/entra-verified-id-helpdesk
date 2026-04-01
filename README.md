@@ -753,7 +753,7 @@ az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-pr
   VerifiedId__TenantId="<tenant-id>" `
   VerifiedId__ClientId="<client-id>" `
   VerifiedId__DidAuthority="did:web:yourdomain.com" `
-  VerifiedId__CredentialType="EmployeeVerifiedCredential" `
+  VerifiedId__CredentialType="VerifiedEmployee" `
   Storage__AccountUri="https://stmystorage.table.core.windows.net/" `
   AuthorizationGroups__HelpDeskAgents="<group-object-id>" `
   AgentPortal__BaseUrl="https://agents.yourdomain.com" `
@@ -774,7 +774,7 @@ az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-pr
   VerifiedId__TenantId="<tenant-id>" \
   VerifiedId__ClientId="<client-id>" \
   VerifiedId__DidAuthority="did:web:yourdomain.com" \
-  VerifiedId__CredentialType="EmployeeVerifiedCredential" \
+  VerifiedId__CredentialType="VerifiedEmployee" \
   Storage__AccountUri="https://stmystorage.table.core.windows.net/" \
   AuthorizationGroups__HelpDeskAgents="<group-object-id>" \
   AgentPortal__BaseUrl="https://agents.yourdomain.com" \

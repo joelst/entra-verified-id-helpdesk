@@ -51,7 +51,7 @@
     },
     "credentialType": {
       "type": "string",
-      "defaultValue": "EmployeeVerifiedCredential",
+      "defaultValue": "VerifiedEmployee",
       "metadata": {
         "description": "Verifiable credential type name defined in your Entra Verified ID tenant."
       }

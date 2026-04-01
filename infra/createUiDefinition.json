@@ -244,8 +244,8 @@
             "name": "credentialType",
             "type": "Microsoft.Common.TextBox",
             "label": "Credential type",
-            "toolTip": "Verifiable credential type name as configured in your Entra Verified ID tenant (e.g. 'EmployeeVerifiedCredential').",
-            "defaultValue": "EmployeeVerifiedCredential",
+            "toolTip": "Verifiable credential type name as configured in your Entra Verified ID tenant (e.g. 'VerifiedEmployee').",
+            "defaultValue": "VerifiedEmployee",
             "constraints": {
               "required": true
             }
