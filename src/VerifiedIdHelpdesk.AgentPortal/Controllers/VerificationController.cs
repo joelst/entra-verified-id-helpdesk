@@ -125,16 +125,18 @@ public class VerificationController : Controller
     // GET /Verification/Pending/{sessionId}
     [HttpGet]
     public IActionResult Pending(
-        string sessionId,
+        string? sessionId,
         string displayCode,
         string? callerDisplayName,
         string? ticketId,
         string? deliveryChannel,
         string? expiresAt)
     {
+        sessionId = ResolveSessionId(sessionId);
+
         var vm = new PendingViewModel
         {
-            SessionId = sessionId,
+            SessionId = sessionId ?? string.Empty,
             DisplayCode = displayCode,
             CallerDisplayName = callerDisplayName ?? "Unknown",
             TicketId = ticketId ?? string.Empty,
@@ -149,8 +151,18 @@ public class VerificationController : Controller
     // GET /Verification/Result/{sessionId}
     [HttpGet]
     [AuthorizeForScopes(ScopeKeySection = "Api:Scopes")]
-    public async Task<IActionResult> Result(string sessionId)
+    public async Task<IActionResult> Result(string? sessionId)
     {
+        sessionId = ResolveSessionId(sessionId);
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return View("Error", CreateErrorViewModel(
+                "Unable to load verification result",
+                "The verification session ID was missing from the request. Return to the pending screen or start a new verification.",
+                "/Verification/Create",
+                "Start new verification"));
+        }
+
         var client = _httpClientFactory.CreateClient("ApiClient");
         var accessToken = await GetApiAccessTokenAsync();
         if (string.IsNullOrEmpty(accessToken))
@@ -262,6 +274,26 @@ public class VerificationController : Controller
     private static string GetTokenUnavailableMessage(string actionDescription)
     {
         return $"We couldn't {actionDescription} because your helpdesk session needs to be refreshed. Refresh the page and sign in again if prompted.";
+    }
+
+    private static string? ResolveSessionId(string? sessionId, ControllerContext? controllerContext = null)
+    {
+        if (!string.IsNullOrWhiteSpace(sessionId))
+            return sessionId;
+
+        var routeData = controllerContext?.RouteData;
+        if (routeData?.Values.TryGetValue("sessionId", out var sessionRouteValue) == true)
+            return sessionRouteValue?.ToString();
+
+        if (routeData?.Values.TryGetValue("id", out var idRouteValue) == true)
+            return idRouteValue?.ToString();
+
+        return null;
+    }
+
+    private string? ResolveSessionId(string? sessionId)
+    {
+        return ResolveSessionId(sessionId, ControllerContext);
     }
 
     private static string GetDownstreamApiMessage(HttpStatusCode statusCode, string actionDescription, string? responseBody = null)

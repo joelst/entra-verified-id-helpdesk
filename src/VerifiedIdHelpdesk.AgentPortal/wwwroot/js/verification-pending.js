@@ -7,6 +7,10 @@ const verifyPortalUrl = dataEl.dataset.verifyPortalUrl || '';
 const expiresAt = new Date(dataEl.dataset.expiresAt);
 let pollingInterval;
 
+function getResultUrl () {
+    return `/Verification/Result?sessionId=${encodeURIComponent(sessionId)}`;
+}
+
 // ── Countdown timer ──────────────────────────────────────────────────
 function updateCountdown () {
     const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
@@ -77,19 +81,23 @@ async function pollStatus () {
 }
 
 function showVerified (data) {
-    document.getElementById('verificationCode').style.display = 'none';
+    document.getElementById('verificationCodePanel').style.display = 'none';
     document.getElementById('countdown').style.display = 'none';
     document.getElementById('resultPanel').style.display = 'block';
+    document.getElementById('statusMessage').style.display = 'none';
     document.getElementById('resultName').textContent = `\u2713 ${data.callerName}`;
+
+    const viewResultLink = document.getElementById('viewResultLink');
+    if (viewResultLink) {
+        viewResultLink.href = getResultUrl();
+    }
 
     const hasDetails = Boolean(data.employeeId || data.department);
     document.getElementById('resultMeta').textContent = hasDetails
         ? `Employee ID: ${data.employeeId || '\u2014'}  \u00b7  Department: ${data.department || '\u2014'}`
-        : 'Verification complete. Loading caller details...';
+        : 'Verification complete. Open the verified result when you are ready to load caller details.';
 
-    setTimeout(() => {
-        window.location.href = `/Verification/Result/${sessionId}`;
-    }, 1500);
+    document.getElementById('resultActions').style.display = 'flex';
 }
 
 function showStatus (type, message) {

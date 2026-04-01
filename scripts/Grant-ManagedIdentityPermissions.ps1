@@ -15,22 +15,38 @@
       - Infrastructure already deployed (app services must exist with managed identities)
       - You must be a Global Administrator or Privileged Role Administrator
 
+    This script does not depend on the Key Vault name. If you customized the App Service
+    names instead of using the default suffix-based convention, pass them explicitly.
+
 .PARAMETER ResourceGroupName
     Name of the Azure resource group containing the app services.
 
 .PARAMETER Suffix
-    The random suffix used in resource names (e.g., 'gecko-hd' from 'app-agents-gecko-hd').
+    Optional suffix used in the default app names (for example, 'gecko-hd' from 'app-agents-gecko-hd').
+    If omitted, provide both -AgentPortalAppName and -ApiAppName.
+
+.PARAMETER AgentPortalAppName
+    Optional explicit name of the AgentPortal App Service.
+
+.PARAMETER ApiAppName
+    Optional explicit name of the Backend API App Service.
 
 .EXAMPLE
     .\scripts\Grant-ManagedIdentityPermissions.ps1 -ResourceGroupName verified-id-ncus -Suffix gecko-hd
+
+.EXAMPLE
+    .\scripts\Grant-ManagedIdentityPermissions.ps1 -ResourceGroupName verified-id-ncus -AgentPortalAppName app-agents-gecko-hd -ApiAppName app-api-gecko-hd
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [string] $ResourceGroupName,
 
-    [Parameter(Mandatory)]
-    [string] $Suffix
+    [string] $Suffix,
+
+    [string] $AgentPortalAppName,
+
+    [string] $ApiAppName
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +58,25 @@ $ErrorActionPreference = 'Stop'
 function Write-Step([string]$Message) {
     Write-Information ''
     Write-Information ">> $Message"
+}
+
+function Test-AzureCliAvailable {
+    $azCommand = Get-Command -Name 'az' -ErrorAction SilentlyContinue
+    if (-not $azCommand) {
+        Write-Error "Azure CLI ('az') was not found in PATH. Install Azure CLI and run 'az login' first."
+        exit 1
+    }
+
+    try {
+        $null = az version 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Azure CLI returned a non-zero exit code.'
+        }
+    }
+    catch {
+        Write-Error 'Azure CLI is installed but could not be executed successfully. Verify the installation and try again.'
+        exit 1
+    }
 }
 
 function Get-AppRoleId([PSCustomObject]$ServicePrincipal, [string]$PermissionName) {
@@ -77,20 +112,20 @@ function Grant-AppRole(
 
     try {
         $uri = "https://graph.microsoft.com/v1.0/servicePrincipals/$GraphSpObjectId/appRoleAssignments"
-        az rest --method POST --uri $uri --headers "Content-Type=application/json" --body "@$tempFile" 2>&1 | Out-Null
+        az rest --method POST --uri $uri --headers 'Content-Type=application/json' --body "@$tempFile" 2>&1 | Out-Null
 
         if ($LASTEXITCODE -ne 0) {
             # Check if this is a 409 Conflict (already assigned)
-            Write-Information "    Already assigned (or conflict) — continuing"
+            Write-Information '    Already assigned (or conflict) — continuing'
         }
         else {
-            Write-Information "    Granted"
+            Write-Information '    Granted'
         }
     }
     catch {
         # HTTP 409 Conflict means the permission is already assigned — that's fine
         if ($_.Exception.Message -match '409' -or $_.Exception.Message -match 'Conflict' -or $_.Exception.Message -match 'already exists') {
-            Write-Information "    Already assigned — continuing"
+            Write-Information '    Already assigned — continuing'
         }
         else {
             throw
@@ -102,8 +137,12 @@ function Grant-AppRole(
 }
 
 # ---------------------------------------------------------------------------
-# Verify Azure CLI login
+# Verify Azure CLI availability and login
 # ---------------------------------------------------------------------------
+
+Write-Step 'Checking Azure CLI availability'
+Test-AzureCliAvailable
+Write-Information '  Azure CLI found'
 
 Write-Step 'Checking Azure CLI login'
 $account = az account show 2>$null | ConvertFrom-Json
@@ -120,8 +159,23 @@ Write-Information "  Tenant       : $($account.tenantId)"
 
 Write-Step 'Looking up managed identity principal IDs'
 
-$agentAppName = "app-agents-$Suffix"
-$apiAppName   = "app-api-$Suffix"
+if ([string]::IsNullOrWhiteSpace($AgentPortalAppName) -or [string]::IsNullOrWhiteSpace($ApiAppName)) {
+    if ([string]::IsNullOrWhiteSpace($Suffix)) {
+        Write-Error 'Provide either -Suffix or both -AgentPortalAppName and -ApiAppName.'
+        exit 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($AgentPortalAppName)) {
+        $AgentPortalAppName = "app-agents-$Suffix"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ApiAppName)) {
+        $ApiAppName = "app-api-$Suffix"
+    }
+}
+
+$agentAppName = $AgentPortalAppName
+$apiAppName = $ApiAppName
 
 $agentIdentity = az webapp identity show -g $ResourceGroupName -n $agentAppName 2>$null | ConvertFrom-Json
 if (-not $agentIdentity -or -not $agentIdentity.principalId) {
@@ -159,7 +213,7 @@ Write-Information "  Found: $($graphSp.appDisplayName) (object ID: $graphSpObjec
 Write-Step 'Resolving Graph permission IDs'
 
 $agentPermNames = @('User.Read.All', 'GroupMember.Read.All')
-$apiPermNames   = @('User.Read.All', 'Mail.Send', 'Chat.Create', 'Chat.ReadWrite.All')
+$apiPermNames = @('User.Read.All', 'Mail.Send', 'Chat.Create', 'Chat.ReadWrite.All')
 
 # Resolve all unique permission names
 $allPermNames = ($agentPermNames + $apiPermNames) | Sort-Object -Unique
@@ -238,7 +292,7 @@ Write-Output "    - $($agentPermNames -join ', ')"
 Write-Output ''
 Write-Output "  API ($apiAppName):"
 Write-Output "    - $($apiPermNames -join ', ')"
-Write-Output "    - VerifiableCredential.Create.All (Entra Verified ID)"
+Write-Output '    - VerifiableCredential.Create.All (Entra Verified ID)'
 Write-Output ''
 Write-Output '  Note: It may take a few minutes for permissions to propagate.'
 Write-Output ''

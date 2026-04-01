@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Identity.Web;
@@ -58,6 +59,38 @@ public class AgentPortalVerificationControllerTests
     Assert.Equal("/api/verification/status/session-123", handler.LastRequest!.RequestUri!.PathAndQuery);
     Assert.Equal("Bearer", handler.LastRequest.Headers.Authorization?.Scheme);
     Assert.Equal("test-access-token", handler.LastRequest.Headers.Authorization?.Parameter);
+  }
+
+  [Fact]
+  public async Task Result_FallsBackToRouteId_WhenSessionIdComesFromConventionalRouting()
+  {
+    var handler = new RecordingHttpMessageHandler(request =>
+    {
+      var payload =
+              """
+                {
+                  "status": "verified",
+                  "verifiedClaims": "{\"displayName\":\"Jane Doe\",\"employeeId\":\"EMP-123\",\"department\":\"Finance\"}",
+                  "verifiedAt": "2026-03-31T12:34:56Z"
+                }
+                """;
+
+      return new HttpResponseMessage(HttpStatusCode.OK)
+      {
+        Content = new StringContent(payload)
+      };
+    });
+
+    var controller = CreateController(handler);
+    controller.ControllerContext.RouteData = new RouteData();
+    controller.ControllerContext.RouteData.Values["id"] = "session-from-route";
+
+    var result = await controller.Result(null);
+
+    var view = Assert.IsType<ViewResult>(result);
+    _ = Assert.IsType<ResultViewModel>(view.Model);
+    Assert.NotNull(handler.LastRequest);
+    Assert.Equal("/api/verification/status/session-from-route", handler.LastRequest!.RequestUri!.PathAndQuery);
   }
 
   [Fact]

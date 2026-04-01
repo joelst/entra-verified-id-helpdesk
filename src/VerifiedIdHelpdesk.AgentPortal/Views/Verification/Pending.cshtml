@@ -7,12 +7,9 @@
 
 <partial name="_StepIndicator" />
 
-<div class="card" id="pendingData"
-     data-session-id="@Model.SessionId"
-     data-api-base-url="@Model.ApiBaseUrl"
+<div class="card" id="pendingData" data-session-id="@Model.SessionId" data-api-base-url="@Model.ApiBaseUrl"
      data-hub-path="@VerifiedIdHelpdesk.Core.Constants.VerificationHubPath"
-     data-verify-portal-url="@Model.VerifyPortalUrl"
-     data-expires-at="@Model.ExpiresAt.ToUniversalTime().ToString("o")">
+     data-verify-portal-url="@Model.VerifyPortalUrl" data-expires-at="@Model.ExpiresAt.ToUniversalTime().ToString("o")">
     <div class="card-title">Verification Pending</div>
 
     @if (Model.DeliveryChannel == "verbal")
@@ -22,62 +19,73 @@
             Tell them to open the verification portal
             @if (hasVerifyPortalUrl)
             {
-                <span>at <a href="@Model.VerifyPortalUrl" target="_blank" rel="noopener noreferrer"><strong>@Model.VerifyPortalUrl</strong></a></span>
-            }
-            and enter their email address plus this code.
-        </div>
-    }
-    else
-    {
-        <div class="alert alert-info">
-            Read this code to your caller, or confirm they received it via
-            <strong>@Model.DeliveryChannel</strong>.
-            @if (hasVerifyPortalUrl)
-            {
-                <span> If needed, send them to <a href="@Model.VerifyPortalUrl" target="_blank" rel="noopener noreferrer">@Model.VerifyPortalUrl</a>.</span>
-            }
-        </div>
-    }
-
-    <div class="code-display-wrapper">
-        <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
-        <button type="button" class="btn btn-sm btn-copy" id="copyCodeBtn" title="Copy code to clipboard">📋 Copy Code</button>
-        @if (hasVerifyPortalUrl)
-        {
-            <button type="button" class="btn btn-sm btn-copy" id="copyCombinedBtn" title="Copy the verification portal link and code together">📝 Copy Code + Link</button>
-        }
-    </div>
-
-    <div class="countdown" id="countdown" aria-live="polite"></div>
-
-    <div style="margin: 20px 0; color: var(--color-text-muted);">
-        <strong>Caller:</strong> @Model.CallerDisplayName<br />
-        @if (!string.IsNullOrEmpty(Model.TicketId))
-        {
-            <span><strong>Ticket:</strong> @Model.TicketId<br /></span>
-        }
-        <strong>Channel:</strong> @Model.DeliveryChannel<br />
-        @if (hasVerifyPortalUrl)
-        {
-            <div class="portal-link-row">
-                <strong>Verification portal:</strong>
-                <a id="verifyPortalLink" href="@Model.VerifyPortalUrl" target="_blank" rel="noopener noreferrer">@Model.VerifyPortalUrl</a>
-                <button type="button" class="btn btn-sm btn-copy" id="copyPortalLinkBtn" title="Copy verification portal link">🔗 Copy Link</button>
+                <span>at <a href="@Model.VerifyPortalUrl" target="_blank"
+                                rel="noopener noreferrer"><strong>@Model.VerifyPortalUrl</strong></a></span>
+                }
+                and enter their email address plus this code.
             </div>
         }
-    </div>
+    else
+        {
+            <div class="alert alert-info">
+                Read this code to your caller, or confirm they received it via
+                <strong>@Model.DeliveryChannel</strong>.
+                @if (hasVerifyPortalUrl)
+                {
+                    <span> If needed, send them to <a href="@Model.VerifyPortalUrl" target="_blank"
+                                                          rel="noopener noreferrer">@Model.VerifyPortalUrl</a>.</span>
+                    }
+                </div>
+            }
 
-    <div id="statusMessage" class="alert" style="display:none;" aria-live="assertive"></div>
+            <div class="code-display-wrapper" id="verificationCodePanel">
+                <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
+                <button type="button" class="btn btn-sm btn-copy" id="copyCodeBtn" title="Copy code to clipboard">📋 Copy
+                    Code</button>
+                    @if (hasVerifyPortalUrl)
+                    {
+                        <button type="button" class="btn btn-sm btn-copy" id="copyCombinedBtn"
+                                title="Copy the verification portal link and code together">📝 Copy Code + Link</button>
+                    }
+                </div>
 
-    <div id="resultPanel" class="result-verified" style="display:none;">
-        <div class="result-name" id="resultName"></div>
-        <div class="result-meta" id="resultMeta"></div>
-    </div>
+                <div class="countdown" id="countdown" aria-live="polite"></div>
 
-    <div id="expiredActions" class="expired-actions" style="display:none;">
-        <a asp-action="Create" class="btn btn-primary">← Start New Verification</a>
-    </div>
-</div>
+                <div style="margin: 20px 0; color: var(--color-text-muted);">
+                    <strong>Caller:</strong> @Model.CallerDisplayName<br />
+                    @if (!string.IsNullOrEmpty(Model.TicketId))
+                    {
+                        <span><strong>Ticket:</strong> @Model.TicketId<br /></span>
+                    }
+                    <strong>Channel:</strong> @Model.DeliveryChannel<br />
+                    @if (hasVerifyPortalUrl)
+                    {
+                        <div class="portal-link-row">
+                            <strong>Verification portal:</strong>
+                            <a id="verifyPortalLink" href="@Model.VerifyPortalUrl" target="_blank"
+                               rel="noopener noreferrer">@Model.VerifyPortalUrl</a>
+                            <button type="button" class="btn btn-sm btn-copy" id="copyPortalLinkBtn"
+                                    title="Copy verification portal link">🔗 Copy Link</button>
+                        </div>
+                    }
+                </div>
+
+                <div id="statusMessage" class="alert" style="display:none;" aria-live="assertive"></div>
+
+                <div id="resultPanel" class="result-verified" style="display:none;">
+                    <div class="result-name" id="resultName"></div>
+                    <div class="result-meta" id="resultMeta"></div>
+                    <div class="result-actions" id="resultActions" style="display:none;">
+                        <a id="viewResultLink" href="@Url.Action("Result", "Verification", new { sessionId = Model.SessionId })"
+                           class="btn btn-primary">View Verified Result</a>
+                        <a asp-action="Create" class="btn btn-outline">Start New Verification</a>
+                    </div>
+                </div>
+
+                <div id="expiredActions" class="expired-actions" style="display:none;">
+                    <a asp-action="Create" class="btn btn-primary">← Start New Verification</a>
+                </div>
+            </div>
 
             @section Scripts {
                 <script src="~/lib/signalr/signalr.min.js"></script>
