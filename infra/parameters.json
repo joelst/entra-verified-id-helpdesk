@@ -28,6 +28,9 @@
     },
     "senderUserId": {
       "value": "<sender-user-object-id>"
+    },
+    "keyVaultName": {
+      "value": ""
     }
   }
 }

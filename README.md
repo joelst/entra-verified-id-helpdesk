@@ -278,7 +278,7 @@ The script prints your **Tenant ID** and **Application (client) ID** — copy th
 
 1. Click the **Deploy to Azure** badge at the top of this page (or <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2FcreateUiDefinition.json" target="_blank" rel="noopener noreferrer">use this direct link</a>)
 
-2. **Basics tab** — select your subscription, resource group, and region. Enter the same suffix you used in step 1 (e.g. `helpdesk-prod`). The Key Vault will be named `kv-<suffix>`.
+2. **Basics tab** — select your subscription, resource group, and region. Enter the same suffix you used in step 1 (e.g. `helpdesk-prod`). By default the Key Vault is named `kv-<suffix>`, but you can now override that on the **Infrastructure** tab if the generated name is already taken.
 
 3. **Infrastructure tab** — choose the App Service plan SKU, storage redundancy, and the IP range that may reach the Agent Portal (your corporate egress IP). Defaults are suitable for dev/test.
 

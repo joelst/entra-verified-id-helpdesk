@@ -147,6 +147,7 @@ Settings configured at deployment time via `infra/main.bicep`.
 | `skuName`           | `S1`                                                   | App Service Plan SKU                                            |
 | `storageRedundancy` | `Standard_LRS`                                         | Storage account redundancy tier                                 |
 | `certName`          | `EntraClientCert`                                      | Name of the client certificate in Key Vault                     |
+| `keyVaultName`      | `''`                                                   | Optional custom Key Vault name if the default `kv-<suffix>` name is already taken |
 | `repoUrl`           | `https://github.com/joelst/entra-verified-id-helpdesk` | GitHub repository URL for App Service deployment                |
 | `repoBranch`        | `main`                                                 | Git branch for App Service deployment                           |
 

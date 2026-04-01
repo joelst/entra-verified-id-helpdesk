@@ -64,6 +64,10 @@ param certName string = 'EntraClientCert'
 @maxLength(24)
 param storageAccountName string = ''
 
+@description('Custom Key Vault name. Leave empty to auto-generate from the suffix (for example, "kv-helpdesk-dev"). Key Vault names must be globally unique, 3–24 characters, use lowercase letters, numbers, and hyphens, start with a letter, and end with a letter or number.')
+@maxLength(24)
+param keyVaultName string = ''
+
 @description('GitHub repository URL to deploy application code from. Defaults to the canonical repo. Change this if you have forked the repository.')
 param repoUrl string = 'https://github.com/joelst/entra-verified-id-helpdesk'
 
@@ -83,7 +87,7 @@ var apiName = 'app-api-${suffix}'
 var agentsName = 'app-agents-${suffix}'
 var verifyName = 'app-verify-${suffix}'
 var storageName = empty(storageAccountName) ? 'st${replace(suffix, '-', '')}' : storageAccountName // no hyphens; must be lowercase
-var kvName = 'kv-${suffix}' // max 24 chars total
+var kvName = empty(keyVaultName) ? 'kv-${suffix}' : keyVaultName // max 24 chars total
 var appiName = 'appi-${suffix}'
 var logName = 'log-${suffix}'
 

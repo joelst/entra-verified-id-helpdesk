@@ -84,6 +84,19 @@
             }
           },
           {
+            "name": "keyVaultName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Key Vault name (optional)",
+            "toolTip": "Leave blank to auto-generate `kv-<suffix>`. If that name is already taken, enter a unique Key Vault name here. Must be 3–24 lowercase letters, numbers, and hyphens, start with a letter, and end with a letter or number.",
+            "placeholder": "kv-myhelpdesk-prod",
+            "defaultValue": "",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z][a-z0-9-]{1,22}[a-z0-9]$",
+              "validationMessage": "Leave blank for auto-generated name, or enter a valid Key Vault name (3–24 lowercase letters, numbers, and hyphens)."
+            }
+          },
+          {
             "name": "corporateIpRange",
             "type": "Microsoft.Common.TextBox",
             "label": "Corporate IP range (CIDR) — Agent Portal access restriction",
@@ -277,7 +290,8 @@
       "senderUserId":       "[steps('notifications').senderUserId]",
       "skuName":            "[steps('infrastructure').skuName]",
       "storageRedundancy":  "[steps('infrastructure').storageRedundancy]",
-      "storageAccountName": "[steps('infrastructure').storageAccountName]"
+      "storageAccountName": "[steps('infrastructure').storageAccountName]",
+      "keyVaultName":       "[steps('infrastructure').keyVaultName]"
     }
   }
 }
