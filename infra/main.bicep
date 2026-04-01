@@ -75,18 +75,18 @@ param alwaysOn bool = false
 // CUSTOMIZE: Adjust these naming conventions to match your organisation's standards.
 // Key Vault max length = 24 chars. Storage account max = 24 chars, lowercase only.
 
-var planName    = 'asp-${suffix}'
-var apiName     = 'app-api-${suffix}'
-var agentsName  = 'app-agents-${suffix}'
-var verifyName  = 'app-verify-${suffix}'
+var planName = 'asp-${suffix}'
+var apiName = 'app-api-${suffix}'
+var agentsName = 'app-agents-${suffix}'
+var verifyName = 'app-verify-${suffix}'
 var storageName = empty(storageAccountName) ? 'st${replace(suffix, '-', '')}' : storageAccountName // no hyphens; must be lowercase
-var kvName      = 'kv-${suffix}'                    // max 24 chars total
-var appiName    = 'appi-${suffix}'
-var logName     = 'log-${suffix}'
+var kvName = 'kv-${suffix}' // max 24 chars total
+var appiName = 'appi-${suffix}'
+var logName = 'log-${suffix}'
 
 // Pre-compute base URLs from resource names to avoid circular resource dependencies.
 // These follow the App Service default hostname pattern.
-var apiBaseUrl    = 'https://${apiName}.azurewebsites.net'
+var apiBaseUrl = 'https://${apiName}.azurewebsites.net'
 var agentsBaseUrl = 'https://${agentsName}.azurewebsites.net'
 var verifyBaseUrl = 'https://${verifyName}.azurewebsites.net'
 
@@ -161,7 +161,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
       name: 'standard' // CUSTOMIZE: Use 'premium' for HSM-backed keys
     }
     tenantId: subscription().tenantId
-    enableRbacAuthorization: true  // Managed Identity role assignments handle access
+    enableRbacAuthorization: true // Managed Identity role assignments handle access
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
     enablePurgeProtection: true
@@ -178,7 +178,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2024-04-01' = {
   location: location
   tags: tags
   sku: {
-    name: skuName  // S1 default (Standard tier); P1v3/P2v3 for production; B2 requires Basic VM quota
+    name: skuName // S1 default (Standard tier); P1v3/P2v3 for production; B2 requires Basic VM quota
     tier: skuTier
   }
   kind: 'linux'
@@ -208,31 +208,31 @@ resource apiApp 'Microsoft.Web/sites@2024-04-01' = {
       minTlsVersion: '1.2'
       http20Enabled: true
       appSettings: [
-        { name: 'ASPNETCORE_ENVIRONMENT',                value: 'Production' }
+        { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
-        { name: 'KeyVault__Uri',                         value: keyVault.properties.vaultUri }
-        { name: 'AzureAd__Instance',                     value: 'https://login.microsoftonline.com/' }
-        { name: 'AzureAd__TenantId',                     value: tenantId }
-        { name: 'AzureAd__ClientId',                     value: clientId }
-        { name: 'VerifiedId__TenantId',                  value: tenantId }
-        { name: 'VerifiedId__ClientId',                  value: clientId }
-        { name: 'VerifiedId__DidAuthority',              value: didAuthority }
-        { name: 'VerifiedId__CredentialType',            value: credentialType }
-        { name: 'VerifiedId__RequestServiceBaseUrl',     value: 'https://verifiedid.did.msidentity.com/v1.0/' }
-        { name: 'Storage__AccountUri',                   value: storageAccount.properties.primaryEndpoints.table }
-        { name: 'AuthorizationGroups__HelpDeskAgents',   value: helpDeskGroupId }
-        { name: 'AgentPortal__BaseUrl',                  value: agentsBaseUrl }
-        { name: 'VerifyPortal__BaseUrl',                 value: verifyBaseUrl }
-        { name: 'Api__BaseUrl',                          value: apiBaseUrl }
-        { name: 'Notifications__SenderEmail',            value: senderEmail }
-        { name: 'Notifications__SenderUserId',           value: senderUserId }
+        { name: 'KeyVault__Uri', value: keyVault.properties.vaultUri }
+        { name: 'AzureAd__Instance', value: 'https://login.microsoftonline.com/' }
+        { name: 'AzureAd__TenantId', value: tenantId }
+        { name: 'AzureAd__ClientId', value: clientId }
+        { name: 'VerifiedId__TenantId', value: tenantId }
+        { name: 'VerifiedId__ClientId', value: clientId }
+        { name: 'VerifiedId__DidAuthority', value: didAuthority }
+        { name: 'VerifiedId__CredentialType', value: credentialType }
+        { name: 'VerifiedId__RequestServiceBaseUrl', value: 'https://verifiedid.did.msidentity.com/v1.0/' }
+        { name: 'Storage__AccountUri', value: storageAccount.properties.primaryEndpoints.table }
+        { name: 'AuthorizationGroups__HelpDeskAgents', value: helpDeskGroupId }
+        { name: 'AgentPortal__BaseUrl', value: agentsBaseUrl }
+        { name: 'VerifyPortal__BaseUrl', value: verifyBaseUrl }
+        { name: 'Api__BaseUrl', value: apiBaseUrl }
+        { name: 'Notifications__SenderEmail', value: senderEmail }
+        { name: 'Notifications__SenderUserId', value: senderUserId }
         // Certificate-based auth: M.I.W. reads the full PFX via the KV Secrets endpoint
-        { name: 'AzureAd__ClientCertificates__0__SourceType',              value: 'KeyVault' }
-        { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl',             value: keyVault.properties.vaultUri }
+        { name: 'AzureAd__ClientCertificates__0__SourceType', value: 'KeyVault' }
+        { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl', value: keyVault.properties.vaultUri }
         { name: 'AzureAd__ClientCertificates__0__KeyVaultCertificateName', value: certName }
         // Oryx build: tell the build system which project to compile in this monorepo
-        { name: 'PROJECT',                               value: 'src/VerifiedIdHelpdesk.Api/VerifiedIdHelpdesk.Api.csproj' }
-        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT',        value: 'true' }
+        { name: 'PROJECT', value: 'src/VerifiedIdHelpdesk.Api/VerifiedIdHelpdesk.Api.csproj' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
       ]
     }
   }
@@ -259,34 +259,37 @@ resource agentsApp 'Microsoft.Web/sites@2024-04-01' = {
       minTlsVersion: '1.2'
       http20Enabled: true
       appSettings: [
-        { name: 'ASPNETCORE_ENVIRONMENT',                value: 'Production' }
+        { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
-        { name: 'KeyVault__Uri',                         value: keyVault.properties.vaultUri }
-        { name: 'AzureAd__Instance',                     value: 'https://login.microsoftonline.com/' }
-        { name: 'AzureAd__TenantId',                     value: tenantId }
-        { name: 'AzureAd__ClientId',                     value: clientId }
-        { name: 'AuthorizationGroups__HelpDeskAgents',   value: helpDeskGroupId }
-        { name: 'Api__BaseUrl',                          value: apiBaseUrl }
-        { name: 'Api__Scopes__0',                        value: 'api://${clientId}/access_as_agent' }
+        { name: 'KeyVault__Uri', value: keyVault.properties.vaultUri }
+        { name: 'AzureAd__Instance', value: 'https://login.microsoftonline.com/' }
+        { name: 'AzureAd__TenantId', value: tenantId }
+        { name: 'AzureAd__ClientId', value: clientId }
+        { name: 'AuthorizationGroups__HelpDeskAgents', value: helpDeskGroupId }
+        { name: 'Api__BaseUrl', value: apiBaseUrl }
+        { name: 'VerifyPortal__BaseUrl', value: verifyBaseUrl }
+        { name: 'Api__Scopes__0', value: 'api://${clientId}/access_as_agent' }
         // Certificate-based auth
-        { name: 'AzureAd__ClientCertificates__0__SourceType',              value: 'KeyVault' }
-        { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl',             value: keyVault.properties.vaultUri }
+        { name: 'AzureAd__ClientCertificates__0__SourceType', value: 'KeyVault' }
+        { name: 'AzureAd__ClientCertificates__0__KeyVaultUrl', value: keyVault.properties.vaultUri }
         { name: 'AzureAd__ClientCertificates__0__KeyVaultCertificateName', value: certName }
         // Oryx build
-        { name: 'PROJECT',                               value: 'src/VerifiedIdHelpdesk.AgentPortal/VerifiedIdHelpdesk.AgentPortal.csproj' }
-        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT',        value: 'true' }
+        { name: 'PROJECT', value: 'src/VerifiedIdHelpdesk.AgentPortal/VerifiedIdHelpdesk.AgentPortal.csproj' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
       ]
       // IP restriction: allow only the corporate IP range.
       // When corporateIpRange is the default '0.0.0.0/0' no restriction is applied.
-      ipSecurityRestrictions: corporateIpRange == '0.0.0.0/0' ? [] : [
-        {
-          ipAddress: corporateIpRange
-          action: 'Allow'
-          priority: 100
-          name: 'AllowCorporate'
-          description: 'Allow only from corporate network' // CUSTOMIZE: Update description
-        }
-      ]
+      ipSecurityRestrictions: corporateIpRange == '0.0.0.0/0'
+        ? []
+        : [
+            {
+              ipAddress: corporateIpRange
+              action: 'Allow'
+              priority: 100
+              name: 'AllowCorporate'
+              description: 'Allow only from corporate network' // CUSTOMIZE: Update description
+            }
+          ]
     }
   }
 }
@@ -312,18 +315,17 @@ resource verifyApp 'Microsoft.Web/sites@2024-04-01' = {
       minTlsVersion: '1.2'
       http20Enabled: true
       appSettings: [
-        { name: 'ASPNETCORE_ENVIRONMENT',                value: 'Production' }
+        { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
-        { name: 'KeyVault__Uri',                         value: keyVault.properties.vaultUri }
-        { name: 'Api__BaseUrl',                          value: apiBaseUrl }
+        { name: 'KeyVault__Uri', value: keyVault.properties.vaultUri }
+        { name: 'Api__BaseUrl', value: apiBaseUrl }
         // Oryx build
-        { name: 'PROJECT',                               value: 'src/VerifiedIdHelpdesk.VerifyPortal/VerifiedIdHelpdesk.VerifyPortal.csproj' }
-        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT',        value: 'true' }
+        { name: 'PROJECT', value: 'src/VerifiedIdHelpdesk.VerifyPortal/VerifiedIdHelpdesk.VerifyPortal.csproj' }
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
       ]
     }
   }
 }
-
 
 // ── Source Control / Oryx Build ───────────────────────────────────────────────
 //
@@ -374,7 +376,6 @@ resource verifySourceControl 'Microsoft.Web/sites/sourcecontrols@2024-04-01' = {
   }
 }
 
-
 // ── RBAC Role Assignments ──────────────────────────────────────────────────────
 //
 // Key Vault Secrets User (4633458b-…) — read-only access to Key Vault secrets.
@@ -385,8 +386,8 @@ resource verifySourceControl 'Microsoft.Web/sites/sourcecontrols@2024-04-01' = {
 // Only the API needs Storage access. All three apps need Key Vault secrets access.
 // AgentPortal and API also need certificate read access to load the Entra client cert.
 
-var kvSecretsUserRoleId           = '4633458b-17de-408a-b874-0445c86b69e6'
-var kvCertificateUserRoleId       = 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba'
+var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+var kvCertificateUserRoleId = 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba'
 var storageTableContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 
 resource apiKvRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

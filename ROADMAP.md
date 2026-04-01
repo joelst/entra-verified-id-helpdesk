@@ -1,188 +1,218 @@
-# Entra Verified ID Helpdesk — Next Phase Roadmap
+# Entra Verified ID Helpdesk — Roadmap
 
-> **Status**: Core verification flow is working end-to-end ✅
-> **Last updated**: 2026-03-31
-
----
-
-## Phase 1 — Agent Experience Polish
-
-### 1.1 Session History Page ✅
-**Status**: Complete.
-
-Agents can view their past verifications via a "History" nav link. `ISessionStore.GetByAgentAsync` queries Table Storage by `AgentEntraId`. The API exposes `GET /api/verification/my-sessions` (authorized, reads agent OID from JWT). `History.cshtml` displays caller, email, ticket, channel, status (color-coded badges), and time.
-
-### 1.2 Concurrent Sessions Dashboard ✅
-**Status**: Complete.
-
-Agents can see all their active pending verifications on the Create page. Session cards show caller name, delivery channel, countdown timer, and link to the Pending page. A badge shows "N/3 active" and the submit button is disabled when at max capacity. `GET /api/verification/pending-sessions` endpoint serves the data, polled every 15 seconds via `active-sessions.js`.
-
-### 1.3 Agent UX Improvements ✅
-**Status**: Complete.
-
-- **Step indicator**: 3-step breadcrumb (Generate Code → Awaiting Verification → Verified) on all views via `_StepIndicator.cshtml` partial
-- **Expired session navigation**: "Start New Verification" button appears when code expires or session fails (both countdown-based and poll-based)
-- **Validation summary fix**: Hidden `validation-summary-valid` div that was always rendering as a red box
-- **Error handler path**: Fixed exception handler from `/Home/Error` (404) to `/Verification/Error`
-- **MSAL re-auth**: `[AuthorizeForScopes]` on `Create` POST and `Result` actions to handle token cache expiry
+> Active backlog only. Completed milestones have been removed from this file.
+> See `README.md` and `CHANGELOG.md` for shipped capabilities.
+> Last updated: 2026-03-31
 
 ---
 
-## Phase 2 — Notification Channels
+## Priority 0 — Correctness and Security
 
-### 2.1 Email Delivery Testing & Fixes ✅
-**Status**: Complete — verified working with real sender mailbox.
+### 0.1 Fix the AgentPortal result/status contract
 
-**Remaining polish**:
-- Consider adding a "Resend" button on the Pending page
+**Problem**
 
-### 2.2 Teams Delivery Testing & Fixes
-**Goal**: Verify Teams chat delivery works end-to-end.
+The agent-facing Result flow and the Pending-page polling fallback currently read the public status endpoint while expecting verified claims. The public endpoint is intentionally privacy-safe and must not return claims.
 
-**Prerequisites**:
-- `Notifications:SenderUserId` app setting (Entra Object ID of the bot/service account)
-- `Chat.Create` + `Chat.ReadWrite.All` permissions on the API managed identity (already granted)
+**Planned work**
 
-**Plan**:
-- Test 1:1 chat creation between the sender and recipient
-- Verify the message renders with the code and verification portal link
-- Handle edge cases: recipient not found, chat creation fails
+- Change the agent Result flow to use an authorized agent-only status endpoint.
+- Remove any assumption that `/api/verification/public-status/{sessionId}` returns claims.
+- Update the pending fallback path so SignalR failure still leads to a correct agent result without depending on public PII.
+- Add tests that prove the public endpoint stays claim-free while agents still see verified identity details.
 
----
+### 0.2 Correct failed-attempt semantics on `/api/verification/initiate`
 
-## Phase 3 — Security Hardening
+**Problem**
 
-### 3.1 OBO Token Flow End-to-End ✅
-**Status**: Complete.
+The current `FailedAttempts` behavior does not cleanly represent failed code-entry attempts. It also is not persisted before downstream request-creation failures, which weakens both the security story and operator expectations.
 
-The AgentPortal authenticates to the API using bearer tokens via the On-Behalf-Of flow. `[AuthorizeForScopes]` is applied to AgentPortal controller actions. `ITokenAcquisition` acquires tokens using `Api:Scopes`, and the `ApiClient` `HttpClient` forwards bearer tokens on every request. The API validates JWTs via `AddMicrosoftIdentityWebApi`.
+**Planned work**
 
-### 3.2 Verified ID Callback JWT Validation ✅
-**Status**: Complete.
+- Redesign the lockout model so the documented "max 5 failed code attempts" rule matches the code path that enforces it.
+- Persist attempt-related state before outbound Verified ID calls when needed.
+- Add tests for invalid guesses, lockout behavior, and downstream failure handling.
+- Update docs so the enforced rule is described precisely and consistently.
 
-The callback JWT from the Verified ID service is now fully validated:
-- **Issuer**: Custom validator accepting both `login.microsoftonline.com` and `verifiedid.did.msidentity.com`
-- **Audience**: Validated against the app client ID from configuration
-- **Signature**: Validated against tenant signing keys
-- **Lifetime**: Validated with a 5-minute clock skew tolerance
+### 0.3 Make downstream auth failures visible to agents
 
-State-based session correlation remains as defense-in-depth alongside JWT validation.
+**Problem**
 
-### 3.3 Rate Limiting ✅
-**Status**: Complete.
+Some AgentPortal pages still degrade to empty UI when downstream API auth fails, which makes token or API issues look like missing data instead of real failures.
 
-ASP.NET Core rate limiting middleware protects public endpoints:
-- `/api/verification/initiate` — 10 requests/minute per IP
-- `/api/verification/public-status` — 60 requests/minute per IP
-- `/api/verification/callback` — 30 requests/minute per IP
+**Planned work**
 
-Session-level limits are also enforced: max 5 failed code attempts per session, max 3 concurrent pending sessions per agent.
+- Replace silent empty-state fallbacks with actionable error handling on user-initiated pages.
+- Audit all AgentPortal proxy actions for the same pattern.
+- Preserve non-interactive behavior only for background polling scenarios where it is intentional.
+- Add coverage for 401, 403, and transient API failures.
 
-### 3.4 Security Headers Standardization ✅
-**Status**: Complete.
+### 0.4 Align instructions and operator docs with the current callback model
 
-Security headers applied to all three apps via middleware:
-- `X-Frame-Options: DENY`
-- `X-Content-Type-Options: nosniff`
-- `Referrer-Policy: strict-origin`
-- `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
-- `X-Permitted-Cross-Domain-Policies: none`
-- Content Security Policy on both portals (restrictive, no inline scripts)
+**Problem**
 
-### 3.5 Input Sanitization ✅
-**Status**: Complete.
+Some repo guidance still describes the older callback/JWT model and stale cookie guidance. That increases the chance of reintroducing already-fixed auth and callback regressions.
 
-Graph search syntax injection fixed in AgentPortal `DirectoryController` — double quotes are stripped from user input before Graph API calls. Both AgentPortal and Api controllers sanitize input consistently.
+**Planned work**
 
-### 3.6 Remaining Security Items
-**Goal**: Address outstanding security hardening work.
-
-**Completed**:
-- ✅ **Cookie Hardening**: `HttpOnly=Always`, `Secure=Always`, `SameSite=Lax` (AgentPortal, for OIDC) / `Strict` (VerifyPortal, Api) configured via `CookiePolicyOptions`
-- ✅ **Dependency Scanning**: Dependabot config (`.github/dependabot.yml`) scans NuGet + GitHub Actions weekly. PR dependency review workflow (`.github/workflows/dependency-review.yml`) checks for high-severity vulnerabilities and runs `dotnet list package --vulnerable`
-
-**Remaining**:
-- **Bundle CDN Dependencies**: VerifyPortal still loads scripts from `cdn.jsdelivr.net` — bundle locally to remove external dependency and tighten CSP
-- **Distributed Token Cache**: Replace in-memory token cache with a distributed cache (relates to Phase 4.3)
+- Update `CLAUDE.md`, deployment docs, and troubleshooting notes to match the current one-time callback token plus request-correlation model.
+- Document that strict receipt JWT validation is optional and only relevant for `presentation_verified` when the tenant flow reliably provides it.
+- Document the current AgentPortal cookie rationale so contributors do not revert it accidentally.
 
 ---
 
-## Phase 4 — Production Readiness
+## Priority 1 — Test Coverage and Confidence
 
-### 4.1 Bundle SignalR Locally ✅
-**Status**: Complete.
+### 1.1 Add AgentPortal integration coverage
 
-SignalR JS client bundled locally in `wwwroot/lib/signalr/`. `Pending.cshtml` updated to reference local file. CDN dependency on `cdn.jsdelivr.net` removed from CSP `script-src`. Custom 404 handler also added.
+**Goal**
 
-### 4.2 Health Check Endpoints ✅
-**Status**: Complete.
+Cover the paths that have been most regression-prone and are currently lightly tested compared to the API.
 
-`/health` endpoint added to all three apps (basic liveness). `/ready` endpoint on the API checks Table Storage and Key Vault connectivity. App Service health check paths configured in Bicep.
+**Planned work**
 
-### 4.3 Distributed Token Cache
-**Goal**: Replace in-memory token cache so tokens survive app restarts.
+- Add tests for Result, Pending fallback behavior, History, and AccessDenied flows.
+- Verify bearer-token forwarding on every agent-to-API proxy action.
+- Add negative tests for empty or unauthorized agent responses so UI behavior is deliberate.
 
-**Plan**:
-- Add Redis or Azure Table Storage-based distributed cache
-- Configure MIWA to use `AddDistributedTokenCaches()` instead of `AddInMemoryTokenCaches()`
-- This prevents the `user_null` error pattern if we ever switch back to delegated auth
+### 1.2 Expand callback and initiation negative-path tests
 
-### 4.4 Custom Error Pages ✅
-**Status**: Complete.
+**Goal**
 
-Styled error pages for both portals. Exception handler path corrected to `/Verification/Error` with `[AllowAnonymous]` action. 404 handler added. No internal details leak in production error responses.
+Prove the hardening logic under bad or incomplete inputs, not just the happy path.
 
----
+**Planned work**
 
-## Implementation Order (Recommended)
+- Add coverage for forged or missing callback tokens.
+- Add coverage for callback correlation edge cases and strict-mode behavior.
+- Add tests for request-creation failures and attempt-state persistence.
+- Keep public-endpoint PII-boundary tests explicit and negative.
 
-| Priority | Item | Effort | Status |
-|----------|------|--------|--------|
-| 1 | Session History (1.1) | Medium | ✅ Done |
-| 2 | Agent UX Improvements (1.3) | Medium | ✅ Done |
-| 3 | Concurrent Sessions (1.2) | Medium | ✅ Done |
-| 4 | OBO Token Verification (3.1) | Medium | ✅ Done |
-| 5 | Rate Limiting (3.3) | Small | ✅ Done |
-| 6 | Callback JWT Validation (3.2) | Large | ✅ Done |
-| 7 | Security Headers (3.4) | Small | ✅ Done |
-| 8 | Input Sanitization (3.5) | Small | ✅ Done |
-| 9 | Cookie Hardening (3.6) | Small | ✅ Done |
-| 10 | Dependency Scanning (3.6) | Small | ✅ Done |
-| 11 | Bundle SignalR (4.1) | Small | ✅ Done |
-| 12 | Health Checks (4.2) | Small | ✅ Done |
-| 13 | Error Pages (4.4) | Small | ✅ Done |
-| 14 | Email Testing (2.1) | Small | ✅ Done |
-| 15 | Teams Testing (2.2) | Small | Pending — needs sender user ID config |
-| 16 | Bundle VerifyPortal CDN (3.6) | Small | Pending |
-| 17 | Distributed Cache (4.3) | Medium | Pending — needs Redis/storage decision |
+### 1.3 Add startup configuration validation
+
+**Goal**
+
+Fail fast on missing or inconsistent configuration instead of discovering problems through runtime errors after deployment.
+
+**Planned work**
+
+- Validate required settings for `VerifiedId`, `AzureAd`, `Api`, `Notifications`, and `AuthorizationGroups` at startup.
+- Surface configuration failures clearly in logs and readiness checks.
+- Add environment-aware validation so `Testing` remains lightweight while deployed environments are strict.
 
 ---
 
-## Bug Fixes (this session)
+## Priority 2 — Production Hardening
 
-- Verified ID API URL: removed tenant ID from URL path (API uses bearer token for tenant)
-- Session expiry: fixed `DateTimeOffset` vs string comparison in Azure Table Storage filter
-- Verified ID API error logging: full URL and response body now logged on failure
+### 2.1 Replace the in-memory token cache with a distributed cache
+
+**Goal**
+
+Reduce restart-related auth churn and remove a known operational weak point in the AgentPortal.
+
+**Planned work**
+
+- Choose a durable cache backing store.
+- Move MIWA token caching off `AddInMemoryTokenCaches()`.
+- Validate restart behavior and token survivability under App Service recycle scenarios.
+
+### 2.2 Remove stale external script allowances from VerifyPortal
+
+**Goal**
+
+Tighten the CSP and asset model so the VerifyPortal only allows what it actually needs.
+
+**Planned work**
+
+- Remove the remaining `cdn.jsdelivr.net` allowance if no runtime dependency remains.
+- Bundle any remaining client assets locally.
+- Add a CSP-focused smoke test to prevent the allowance from returning silently.
+
+### 2.3 Add operational alerts and dashboards
+
+**Goal**
+
+Turn callback/auth regressions into fast-to-diagnose operational signals instead of support tickets.
+
+**Planned work**
+
+- Add Application Insights alerts for callback rejection spikes, repeated `MsalUiRequiredException` patterns, notification failures, and unusual session-expiry volume.
+- Create a lightweight operator dashboard for verification throughput, failure reasons, and callback auth mode distribution.
+- Document the main triage queries in `docs/troubleshooting.md`.
+
+### 2.4 Validate Teams delivery end-to-end
+
+**Goal**
+
+Move Teams delivery from "implemented" to operationally trustworthy.
+
+**Planned work**
+
+- Validate 1:1 chat creation and message delivery against real tenant conditions.
+- Handle recipient-not-found and chat-creation failure paths cleanly.
+- Add operator guidance for sender identity setup and permissions.
 
 ---
 
-## What We Built (Night 1 — for context)
+## Priority 3 — Workflow Enhancements
 
-Starting from a `TypeLoadException` at deploy time, we fixed:
-- NuGet package incompatibility (MicrosoftGraph → GraphServiceClient)
-- PKCS#12 certificate format for MIWA
-- Key Vault RBAC (secrets + certificates)
-- App-only Graph auth (managed identity, not delegated)
-- Least-privilege permissions (Graph on MIs, Verified ID on app reg)
-- OBO token flow wiring
-- CSP compliance (all inline scripts → external files)
-- Verified ID client credentials auth (certificate from Key Vault)
-- Callback endpoint format (receipt.id_token, not root id_token)
-- Table Storage property size limits
-- TempData cookie overflow (sessionId via query string)
-- CORS origins (custom domains, trailing slash matching)
-- Result page auth redirect loop
-- Verbal delivery channel
-- Placeholder logo, sign-out button, display name
-- Email case normalization
-- HTTP/2 enabled
+### 3.1 Add resend and cancel session actions
+
+**Goal**
+
+Give agents better control over pending sessions without creating duplicate or confusing verification requests.
+
+**Planned work**
+
+- Add a resend action for supported delivery channels.
+- Add an explicit cancel/expire action for sessions that should no longer remain pending.
+- Ensure audit logging and rate limits remain correct for both actions.
+
+### 3.2 Add deeper session and audit views for agents
+
+**Goal**
+
+Improve supportability without exposing public-facing PII.
+
+**Planned work**
+
+- Add a dedicated agent session detail view.
+- Include callback outcome, delivery channel, timestamps, and verification result details.
+- Keep the public surface area unchanged and privacy-safe.
+
+### 3.3 Add supervisor/reporting capabilities
+
+**Goal**
+
+Support larger helpdesk teams with better oversight and troubleshooting.
+
+**Planned work**
+
+- Add supervisor-only policies and views.
+- Provide team-level throughput and failure reporting.
+- Keep group-based authorization aligned with the existing Entra-based model.
+
+---
+
+## Open Investigations
+
+- Validate callback `requestId` behavior with real tenant traces and decide whether current enforcement should remain strict or become warning-only under specific callback shapes.
+- Decide on the distributed cache backing store and operating model for App Service deployments.
+- Revisit whether session lockout should be per session only, per caller email, or combined with stronger telemetry-driven abuse detection.
+
+---
+
+## Recommended Order
+
+| Priority | Item                                  | Outcome                                                                                 |
+| -------- | ------------------------------------- | --------------------------------------------------------------------------------------- |
+| 1        | Fix agent result/status contract      | Agents reliably see verified identity without weakening the public API privacy boundary |
+| 2        | Correct failed-attempt semantics      | The security model matches the documented lockout behavior                              |
+| 3        | Surface downstream auth failures      | Auth issues stop presenting as misleading empty UI                                      |
+| 4        | Align docs and instructions           | Contributors stop reintroducing stale callback or cookie guidance                       |
+| 5        | Add AgentPortal integration coverage  | Highest-risk UI and auth paths gain regression protection                               |
+| 6        | Expand negative-path API tests        | Callback and initiate hardening is validated under failure conditions                   |
+| 7        | Add startup config validation         | Misconfiguration is caught before or during startup, not after deployment               |
+| 8        | Introduce distributed token cache     | Restart-related auth issues are reduced materially                                      |
+| 9        | Tighten VerifyPortal CSP              | The public portal has a smaller external attack surface                                 |
+| 10       | Add operational alerts and dashboards | Callback and auth regressions become faster to detect and triage                        |

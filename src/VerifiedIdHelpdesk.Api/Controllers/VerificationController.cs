@@ -121,6 +121,7 @@ public class VerificationController : ControllerBase
             return BadRequest("Email and code are required.");
 
         // Normalize
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var normalizedCode = request.Code.Replace("-", "").Replace(" ", "").ToUpperInvariant();
         if (normalizedCode.Length != Constants.CodeLength)
             return BadRequest("Invalid code format.");
@@ -128,14 +129,16 @@ public class VerificationController : ControllerBase
         var hmacKey = _config["HmacKey"]!;
         var codeHash = CodeHasher.Hash(normalizedCode, hmacKey);
 
-        var session = await _sessions.GetByCodeHashAsync(codeHash, request.Email.Trim().ToLowerInvariant());
-        if (session == null || session.Status != "pending" || session.ExpiresAt <= DateTime.UtcNow)
+        var session = await _sessions.GetByCodeHashAsync(codeHash, normalizedEmail);
+        if (session == null)
+            return await RecordFailedAttemptAndRejectAsync(normalizedEmail);
+
+        if (session.Status != SessionStatus.Pending || session.ExpiresAt <= DateTime.UtcNow)
             return BadRequest("Code is invalid or has expired.");
 
-        session.FailedAttempts++;
-        if (session.FailedAttempts > Constants.MaxFailedAttempts)
+        if (session.FailedAttempts >= Constants.MaxFailedAttempts)
         {
-            session.Status = "failed";
+            session.Status = SessionStatus.Failed;
             await _sessions.UpdateAsync(session);
             return BadRequest("Too many failed attempts.");
         }
@@ -251,6 +254,24 @@ public class VerificationController : ControllerBase
         });
 
         return Ok(result);
+    }
+
+    private async Task<IActionResult> RecordFailedAttemptAndRejectAsync(string normalizedEmail)
+    {
+        var pendingSession = await _sessions.GetMostRecentPendingByCallerEmailAsync(normalizedEmail);
+        if (pendingSession == null || pendingSession.Status != SessionStatus.Pending || pendingSession.ExpiresAt <= DateTime.UtcNow)
+            return BadRequest("Code is invalid or has expired.");
+
+        pendingSession.FailedAttempts++;
+        if (pendingSession.FailedAttempts >= Constants.MaxFailedAttempts)
+        {
+            pendingSession.Status = SessionStatus.Failed;
+            await _sessions.UpdateAsync(pendingSession);
+            return BadRequest("Too many failed attempts.");
+        }
+
+        await _sessions.UpdateAsync(pendingSession);
+        return BadRequest("Code is invalid or has expired.");
     }
 
     private static string MaskEmail(string email)

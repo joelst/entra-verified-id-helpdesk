@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\VerifiedIdHelpdesk.Core\VerifiedIdHelpdesk.Core.csproj" />
     <ProjectReference Include="..\..\src\VerifiedIdHelpdesk.Infrastructure\VerifiedIdHelpdesk.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\VerifiedIdHelpdesk.Api\VerifiedIdHelpdesk.Api.csproj" />
+    <ProjectReference Include="..\..\src\VerifiedIdHelpdesk.AgentPortal\VerifiedIdHelpdesk.AgentPortal.csproj" />
     <ProjectReference Include="..\..\src\VerifiedIdHelpdesk.Notifications\VerifiedIdHelpdesk.Notifications.csproj" />
   </ItemGroup>
 

@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using VerifiedIdHelpdesk.Core;
 using VerifiedIdHelpdesk.Core.Interfaces;
 using VerifiedIdHelpdesk.Core.Models;
 using VerifiedIdHelpdesk.Infrastructure;
@@ -102,6 +103,33 @@ public class FullFlowTests : IClassFixture<TestWebApplicationFactory>
             new { email, code = "AAAAAAAA" }); // wrong code
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// The fifth wrong code guess should lock the pending session so the caller
+    /// cannot keep brute-forcing the same verification request.
+    /// </summary>
+    [Fact]
+    public async Task Initiate_WithFifthWrongCode_LocksPendingSession()
+    {
+        const string correctCode = "LMNO4567";
+        const string email = "lockout@example.com";
+        var session = CreateSeededSession(correctCode, email);
+        session.FailedAttempts = Constants.MaxFailedAttempts - 1;
+        await _factory.Sessions.CreateAsync(session);
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/verification/initiate",
+            new { email, code = "WRONG999" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Too many failed attempts.", body);
+
+        var updated = await _factory.Sessions.GetAsync(session.SessionId);
+        Assert.NotNull(updated);
+        Assert.Equal(Constants.MaxFailedAttempts, updated!.FailedAttempts);
+        Assert.Equal(SessionStatus.Failed, updated.Status);
     }
 
     /// <summary>

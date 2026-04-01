@@ -1,12 +1,21 @@
 @model VerifiedIdHelpdesk.AgentPortal.Models.ErrorViewModel
 @{
-    ViewData["Title"] = "Error";
+    ViewData["Title"] = Model?.Title ?? "Error";
+    var message = Model?.Message ?? "An unexpected error occurred. Please try again or contact your IT administrator.";
 }
 <div class="card">
-    <div class="card-title" style="color: var(--color-error);">An error occurred</div>
+    <div class="card-title" style="color: var(--color-error);">@(Model?.Title ?? "An error occurred")</div>
     <div class="alert alert-error">
-        An unexpected error occurred. Please try again or contact your IT administrator.
+        @message
     </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model?.RecoveryActionText) && !string.IsNullOrWhiteSpace(Model?.RecoveryActionUrl))
+    {
+        <div style="margin-bottom: 16px;">
+            <a href="@Model!.RecoveryActionUrl" class="btn btn-primary">@Model.RecoveryActionText</a>
+        </div>
+    }
+
     @if (Model?.ShowRequestId == true)
     {
         <!-- SECURITY: Only show request ID (for log correlation), never show exception details -->

@@ -71,6 +71,22 @@ public class AzureTableSessionStore : ISessionStore
         return null;
     }
 
+    public async Task<VerificationSession?> GetMostRecentPendingByCallerEmailAsync(string callerEmail)
+    {
+        var filter = TableClient.CreateQueryFilter(
+            $"PartitionKey eq {Constants.SessionPartitionKey} and CallerEmail eq {callerEmail} and Status eq {SessionStatus.Pending}");
+
+        VerificationSession? latest = null;
+        await foreach (var entity in _table.QueryAsync<TableEntity>(filter: filter))
+        {
+            var session = FromEntity(entity);
+            if (latest == null || session.CreatedAt > latest.CreatedAt)
+                latest = session;
+        }
+
+        return latest;
+    }
+
     public async Task UpdateAsync(VerificationSession session)
     {
         var entity = ToEntity(session);

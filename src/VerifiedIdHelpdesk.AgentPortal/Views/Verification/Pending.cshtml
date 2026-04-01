@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "Waiting for Verification";
     ViewData["CurrentStep"] = 2;
+    var hasVerifyPortalUrl = !string.IsNullOrWhiteSpace(Model.VerifyPortalUrl);
 }
 
 <partial name="_StepIndicator" />
@@ -10,14 +11,20 @@
      data-session-id="@Model.SessionId"
      data-api-base-url="@Model.ApiBaseUrl"
      data-hub-path="@VerifiedIdHelpdesk.Core.Constants.VerificationHubPath"
+     data-verify-portal-url="@Model.VerifyPortalUrl"
      data-expires-at="@Model.ExpiresAt.ToUniversalTime().ToString("o")">
     <div class="card-title">Verification Pending</div>
 
     @if (Model.DeliveryChannel == "verbal")
     {
-        <div class="alert alert-warning" style="font-size:1.1em;">
-            <strong>🗣️ Read this code to the caller now.</strong> They need to enter it at the
-            verification portal to proceed. Do not share it via chat or email — verbal only.
+        <div class="alert alert-warning" style="font-size:1.05em;">
+            <strong>🗣️ Read this code to the caller now.</strong>
+            Tell them to open the verification portal
+            @if (hasVerifyPortalUrl)
+            {
+                <span>at <a href="@Model.VerifyPortalUrl" target="_blank" rel="noopener noreferrer"><strong>@Model.VerifyPortalUrl</strong></a></span>
+            }
+            and enter their email address plus this code.
         </div>
     }
     else
@@ -25,12 +32,20 @@
         <div class="alert alert-info">
             Read this code to your caller, or confirm they received it via
             <strong>@Model.DeliveryChannel</strong>.
+            @if (hasVerifyPortalUrl)
+            {
+                <span> If needed, send them to <a href="@Model.VerifyPortalUrl" target="_blank" rel="noopener noreferrer">@Model.VerifyPortalUrl</a>.</span>
+            }
         </div>
     }
 
     <div class="code-display-wrapper">
         <div class="code-display" id="verificationCode">@Model.DisplayCode</div>
-        <button type="button" class="btn btn-sm btn-copy" id="copyCodeBtn" title="Copy code to clipboard">📋 Copy</button>
+        <button type="button" class="btn btn-sm btn-copy" id="copyCodeBtn" title="Copy code to clipboard">📋 Copy Code</button>
+        @if (hasVerifyPortalUrl)
+        {
+            <button type="button" class="btn btn-sm btn-copy" id="copyCombinedBtn" title="Copy the verification portal link and code together">📝 Copy Code + Link</button>
+        }
     </div>
 
     <div class="countdown" id="countdown" aria-live="polite"></div>
@@ -41,7 +56,15 @@
         {
             <span><strong>Ticket:</strong> @Model.TicketId<br /></span>
         }
-        <strong>Channel:</strong> @Model.DeliveryChannel
+        <strong>Channel:</strong> @Model.DeliveryChannel<br />
+        @if (hasVerifyPortalUrl)
+        {
+            <div class="portal-link-row">
+                <strong>Verification portal:</strong>
+                <a id="verifyPortalLink" href="@Model.VerifyPortalUrl" target="_blank" rel="noopener noreferrer">@Model.VerifyPortalUrl</a>
+                <button type="button" class="btn btn-sm btn-copy" id="copyPortalLinkBtn" title="Copy verification portal link">🔗 Copy Link</button>
+            </div>
+        }
     </div>
 
     <div id="statusMessage" class="alert" style="display:none;" aria-live="assertive"></div>
@@ -56,7 +79,7 @@
     </div>
 </div>
 
-@section Scripts {
-    <script src="~/lib/signalr/signalr.min.js"></script>
-    <script src="~/js/verification-pending.js" asp-append-version="true"></script>
-}
+            @section Scripts {
+                <script src="~/lib/signalr/signalr.min.js"></script>
+                <script src="~/js/verification-pending.js" asp-append-version="true"></script>
+            }

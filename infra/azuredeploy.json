@@ -403,6 +403,10 @@
               "value": "[variables('apiBaseUrl')]"
             },
             {
+              "name": "VerifyPortal__BaseUrl",
+              "value": "[variables('verifyBaseUrl')]"
+            },
+            {
               "name": "Api__Scopes__0",
               "value": "[format('api://{0}/access_as_agent', parameters('clientId'))]"
             },

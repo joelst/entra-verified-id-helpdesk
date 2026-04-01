@@ -20,6 +20,12 @@ public interface ISessionStore
     Task<VerificationSession?> GetByCodeHashAsync(string codeHash, string callerEmail);
 
     /// <summary>
+    /// Retrieves the most recent pending session for a caller email.
+    /// Used to record failed code-entry attempts even when the submitted code is incorrect.
+    /// </summary>
+    Task<VerificationSession?> GetMostRecentPendingByCallerEmailAsync(string callerEmail);
+
+    /// <summary>
     /// Retrieves a session by its Entra Verified ID request ID.
     /// Used to correlate webhook callbacks from the Verified ID service.
     /// </summary>

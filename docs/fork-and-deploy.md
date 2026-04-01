@@ -46,10 +46,10 @@ https://portal.azure.com/#create/Microsoft.Template/uri/<url-encoded-template-ur
 
 The Bicep template has two parameters that control where App Service pulls source code from:
 
-| Parameter | Default | Change to |
-|-----------|---------|-----------|
-| `repoUrl` | `https://github.com/joelst/entra-verified-id-helpdesk` | `https://github.com/<your-org>/entra-verified-id-helpdesk` |
-| `repoBranch` | `main` | Your preferred branch (e.g., `main`, `production`) |
+| Parameter    | Default                                                | Change to                                                  |
+| ------------ | ------------------------------------------------------ | ---------------------------------------------------------- |
+| `repoUrl`    | `https://github.com/joelst/entra-verified-id-helpdesk` | `https://github.com/<your-org>/entra-verified-id-helpdesk` |
+| `repoBranch` | `main`                                                 | Your preferred branch (e.g., `main`, `production`)         |
 
 You can set these during deployment in the Azure Portal UI, or update the defaults in `infra/main.bicep`:
 
@@ -67,6 +67,7 @@ param repoBranch string = 'main'
 - **Logo**: Replace `src/VerifiedIdHelpdesk.AgentPortal/wwwroot/images/logo.svg` and `src/VerifiedIdHelpdesk.VerifyPortal/wwwroot/images/logo.svg`
 - **Colors**: Edit CSS variables in `src/VerifiedIdHelpdesk.AgentPortal/wwwroot/css/theme.css` (`:root` section)
 - **App titles**: Update `_Layout.cshtml` in both portals
+- **Screenshots in docs**: If you are shipping a branded fork, replace the images under `/images` so the README matches your UI and tenant branding
 
 ### Credential Type
 - Change `VerifiedId:CredentialType` in app settings to match your Entra Verified ID credential
@@ -75,6 +76,7 @@ param repoBranch string = 'main'
 ### Notification Templates
 - Email HTML template: `src/VerifiedIdHelpdesk.Notifications/GraphNotificationService.cs` in `SendEmailAsync`
 - Teams message: Same file, `SendTeamsMessageAsync`
+- The caller-facing portal address comes from `VerifyPortal:BaseUrl`; keep that app setting correct in both the **Api** and **AgentPortal** so verbal instructions, copy buttons, and notifications all point to your branded portal.
 
 ### Code Format
 - Code length, charset, expiry: Edit `src/VerifiedIdHelpdesk.Core/Constants.cs`
@@ -83,10 +85,10 @@ param repoBranch string = 'main'
 
 Your fork includes CI workflows that run automatically:
 
-| Workflow | File | Trigger |
-|----------|------|---------|
-| Build & Test | `.github/workflows/build.yml` | Push to `main`, `dev`; PRs |
-| Dependency Review | `.github/workflows/dependency-review.yml` | PRs to `main`, `dev` |
+| Workflow          | File                                      | Trigger                    |
+| ----------------- | ----------------------------------------- | -------------------------- |
+| Build & Test      | `.github/workflows/build.yml`             | Push to `main`, `dev`; PRs |
+| Dependency Review | `.github/workflows/dependency-review.yml` | PRs to `main`, `dev`       |
 
 Dependabot is configured in `.github/dependabot.yml` to scan NuGet packages and GitHub Actions weekly.
 

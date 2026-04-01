@@ -39,8 +39,8 @@ Shared libraries:
 
 1. Agent calls `POST /api/verification/generate` → code generated, HMAC-hashed, session stored in Azure Table Storage, code sent to caller via email/Teams.
 2. Caller submits email + code on VerifyPortal → `POST /api/verification/initiate` → code validated, Entra Verified ID presentation request created.
-3. Caller approves in Authenticator → Entra Verified ID sends signed JWT callback to `POST /api/verification/callback`.
-4. Api validates JWT signature, updates session to "verified", pushes result via SignalR to AgentPortal.
+3. Caller approves in Authenticator → Entra Verified ID sends a callback to `POST /api/verification/callback` with the session `state`, request correlation data, and the one-time callback token in headers.
+4. Api validates the callback token and `requestId` correlation, optionally validates `receipt.id_token` for successful `presentation_verified` callbacks when strict mode is enabled, updates session state, and pushes the result via SignalR to AgentPortal.
 
 ### Real-Time Updates
 
@@ -56,10 +56,10 @@ Group-based access via Entra security group configured in `AuthorizationGroups:H
 
 - **Never store or log the plaintext code.** Only `HMAC-SHA256(code, hmacKey)` is persisted. The plaintext is returned to the agent once, then discarded.
 - **Use `RandomNumberGenerator`** for code generation — never `System.Random` or `Guid`.
-- **Validate webhook JWT signatures** on every Entra Verified ID callback before touching the database. JWT validation is **required** before any session state mutation — not optional defense-in-depth.
+- **Authenticate every callback before touching the database.** Pending-session callbacks must match the stored one-time callback token and `requestId`. Strict `receipt.id_token` validation is optional and only applies to successful `presentation_verified` callbacks when explicitly enabled.
 - **All secrets from Key Vault** via `DefaultAzureCredential` and Managed Identity. No secrets in appsettings, env vars, or code.
 - **Generic error messages** to public-facing endpoints — never expose internal details.
-- **Rate limits**: max 5 failed code attempts per session, max 3 concurrent pending sessions per agent.
+- **Rate limits and session caps**: public endpoints are rate-limited and each agent is limited to 3 concurrent pending sessions. Keep the session lockout threshold aligned with `MaxFailedAttempts`.
 - **Idempotent callbacks**: check session status before updating; duplicate webhooks must not double-process.
 
 ### Post-Change Security Checklist
@@ -70,8 +70,10 @@ After any code change, verify these invariants. These are the most common regres
 2. **AgentPortal→Api proxy calls must forward bearer tokens.** Every controller action that calls the Backend API must acquire an OBO access token via `GetApiAccessTokenAsync()` and set the `Authorization` header. Missing tokens cause silent 401s that surface as empty/broken UI.
 3. **Add `[AuthorizeForScopes]`** to every AgentPortal action that acquires tokens, so MSAL re-auth works when the token cache is empty.
 4. **Never use null-forgiving (`!`) on claim resolution.** Always validate `User.FindFirstValue("oid")` and return `Unauthorized()` if null. The `!` operator turns a missing claim into a 500 instead of a clean 401.
-5. **Webhook callbacks must validate JWT before state mutation.** A forged POST with a guessable or leaked session ID must not transition sessions. Return `200 OK` for unknown/already-processed sessions (to prevent retry storms), but `401` for pending sessions with invalid/missing JWTs.
-6. **Tests must assert the negative.** Security tests should verify that data is *absent* (e.g., `Assert.DoesNotContain("verifiedClaims")`), not just that the response succeeds. A test that asserts PII *is present* on a public endpoint bakes in a PII leak.
+5. **Webhook callbacks must validate callback authentication before state mutation.** A forged POST with a guessable or leaked session ID must not transition sessions. Return `200 OK` for unknown/already-processed sessions (to prevent retry storms), but `401` for pending sessions with invalid or missing callback authentication.
+6. **Do not globally force `SameSite=Lax` or `SameSite=Strict` in AgentPortal.** Keep `MinimumSameSitePolicy = Unspecified` so OIDC correlation and nonce cookies can use the framework-managed SameSite behavior.
+7. **Background polling must not force interactive downstream-token challenges.** For cold token-cache scenarios after app restart, background AgentPortal polling should fail quietly rather than loop users back through sign-in.
+8. **Tests must assert the negative.** Security tests should verify that data is _absent_ (e.g., `Assert.DoesNotContain("verifiedClaims")`), not just that the response succeeds. A test that asserts PII _is present_ on a public endpoint bakes in a PII leak.
 
 ### Configuration
 
@@ -82,6 +84,7 @@ Key config sections: `AzureAd`, `KeyVault`, `VerifiedId`, `Storage`, `Authorizat
 ### DI Registration
 
 Services are registered as singletons in `Program.cs` (no Startup class). Interface → implementation pattern:
+
 - `ISessionStore` → `AzureTableSessionStore`
 - `IVerifiedIdClient` → `EntraVerifiedIdClient`
 - `INotificationService` → `GraphNotificationService`

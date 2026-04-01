@@ -3,11 +3,12 @@ const dataEl = document.getElementById('pendingData');
 const sessionId = dataEl.dataset.sessionId;
 const apiBaseUrl = dataEl.dataset.apiBaseUrl;
 const hubPath = dataEl.dataset.hubPath;
+const verifyPortalUrl = dataEl.dataset.verifyPortalUrl || '';
 const expiresAt = new Date(dataEl.dataset.expiresAt);
 let pollingInterval;
 
 // ── Countdown timer ──────────────────────────────────────────────────
-function updateCountdown() {
+function updateCountdown () {
     const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
     const mins = Math.floor(remaining / 60);
     const secs = remaining % 60;
@@ -50,24 +51,22 @@ try {
 }
 
 // ── Polling fallback ─────────────────────────────────────────────────
-function startPolling() {
+function startPolling () {
     if (pollingInterval) return;
     pollingInterval = setInterval(pollStatus, 3000);
 }
 
-async function pollStatus() {
+async function pollStatus () {
     try {
         const resp = await fetch(`${apiBaseUrl}/api/verification/public-status/${sessionId}`);
         if (!resp.ok) return;
         const data = await resp.json();
         if (data.status === 'verified') {
             clearInterval(pollingInterval);
-            let claims = {};
-            try { claims = JSON.parse(data.verifiedClaims || '{}'); } catch {}
             showVerified({
-                callerName: claims.displayName || 'Verified',
-                employeeId: claims.employeeId || '',
-                department: claims.department || '',
+                callerName: 'Identity verified',
+                employeeId: '',
+                department: '',
                 verifiedAt: data.verifiedAt
             });
         } else if (data.status === 'failed' || data.status === 'expired') {
@@ -77,19 +76,23 @@ async function pollStatus() {
     } catch (e) { /* silently ignore network errors */ }
 }
 
-function showVerified(data) {
+function showVerified (data) {
     document.getElementById('verificationCode').style.display = 'none';
     document.getElementById('countdown').style.display = 'none';
     document.getElementById('resultPanel').style.display = 'block';
     document.getElementById('resultName').textContent = `\u2713 ${data.callerName}`;
-    document.getElementById('resultMeta').textContent =
-        `Employee ID: ${data.employeeId || '\u2014'}  \u00b7  Department: ${data.department || '\u2014'}`;
+
+    const hasDetails = Boolean(data.employeeId || data.department);
+    document.getElementById('resultMeta').textContent = hasDetails
+        ? `Employee ID: ${data.employeeId || '\u2014'}  \u00b7  Department: ${data.department || '\u2014'}`
+        : 'Verification complete. Loading caller details...';
+
     setTimeout(() => {
         window.location.href = `/Verification/Result/${sessionId}`;
     }, 1500);
 }
 
-function showStatus(type, message) {
+function showStatus (type, message) {
     const el = document.getElementById('statusMessage');
     el.className = `alert alert-${type === 'error' ? 'error' : 'info'}`;
     el.textContent = message;
@@ -100,16 +103,36 @@ function showStatus(type, message) {
     }
 }
 
-// ── Copy code to clipboard ───────────────────────────────────────────
-document.getElementById('copyCodeBtn')?.addEventListener('click', function () {
+// ── Copy helpers ─────────────────────────────────────────────────────
+function buildCombinedMessage () {
     const code = document.getElementById('verificationCode')?.textContent?.trim();
-    if (code) {
-        navigator.clipboard.writeText(code).then(() => {
+    if (!code && !verifyPortalUrl) return '';
+
+    if (code && verifyPortalUrl) {
+        return `Open the verification portal: ${verifyPortalUrl}\nEnter your email address and this code: ${code}`;
+    }
+
+    return code || verifyPortalUrl;
+}
+
+function attachCopyButton (buttonId, getValue, defaultLabel) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+
+    button.addEventListener('click', function () {
+        const value = getValue();
+        if (!value) return;
+
+        navigator.clipboard.writeText(value).then(() => {
             this.textContent = '✓ Copied';
-            setTimeout(() => { this.textContent = '📋 Copy'; }, 2000);
+            setTimeout(() => { this.textContent = defaultLabel; }, 2000);
         }).catch(() => {
             this.textContent = '✗ Failed';
-            setTimeout(() => { this.textContent = '📋 Copy'; }, 2000);
+            setTimeout(() => { this.textContent = defaultLabel; }, 2000);
         });
-    }
-});
+    });
+}
+
+attachCopyButton('copyCodeBtn', () => document.getElementById('verificationCode')?.textContent?.trim(), '📋 Copy Code');
+attachCopyButton('copyCombinedBtn', buildCombinedMessage, '📝 Copy Code + Link');
+attachCopyButton('copyPortalLinkBtn', () => verifyPortalUrl, '🔗 Copy Link');

@@ -17,6 +17,8 @@ ASP.NET Core loads configuration in the following order (last wins):
 > **Tip:** For environment variables and App Service settings, replace `:` with `__` (double underscore).
 > For example, `AzureAd:TenantId` becomes `AzureAd__TenantId`.
 
+> **Arrays:** Use numeric segments for array entries. For example, `Api:Scopes:0` becomes `Api__Scopes__0` in App Service or other environment-variable-based configuration sources.
+
 ---
 
 ## Application Settings
@@ -45,14 +47,14 @@ Microsoft Entra ID authentication settings used by the OIDC middleware and confi
 
 Settings for the Entra Verified ID service. **Api only.**
 
-| Setting                                   | Used By | Description                                                                                                                                                                                      | Example Value                                 |
-| ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| `VerifiedId:TenantId`                     | Api     | Tenant issuing verified credentials                                                                                                                                                              | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`        |
-| `VerifiedId:ClientId`                     | Api     | App registration used for Verified ID calls                                                                                                                                                      | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`        |
-| `VerifiedId:DidAuthority`                 | Api     | Decentralized identifier for the organization                                                                                                                                                    | `did:web:example.com`                         |
-| `VerifiedId:CredentialType`               | Api     | Type of verifiable credential to request                                                                                                                                                         | `EmployeeVerifiedCredential`                  |
-| `VerifiedId:RequestServiceBaseUrl`        | Api     | Verified ID service endpoint                                                                                                                                                                     | `https://verifiedid.did.msidentity.com/v1.0/` |
-| `VerifiedId:RequireCallbackJwtValidation` | Api     | Optional. When `true`, successful `presentation_verified` callbacks must also include a valid `receipt.id_token`. Leave `false` unless you have verified your tenant/wallet sends this reliably. | `false`                                       |
+| Setting                                   | Used By | Description                                                                                                                                                                                                                                                                                                       | Example Value                                 |
+| ----------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `VerifiedId:TenantId`                     | Api     | Tenant issuing verified credentials                                                                                                                                                                                                                                                                               | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`        |
+| `VerifiedId:ClientId`                     | Api     | App registration used for Verified ID calls                                                                                                                                                                                                                                                                       | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`        |
+| `VerifiedId:DidAuthority`                 | Api     | Decentralized identifier for the organization                                                                                                                                                                                                                                                                     | `did:web:example.com`                         |
+| `VerifiedId:CredentialType`               | Api     | Type of verifiable credential to request                                                                                                                                                                                                                                                                          | `EmployeeVerifiedCredential`                  |
+| `VerifiedId:RequestServiceBaseUrl`        | Api     | Verified ID service endpoint                                                                                                                                                                                                                                                                                      | `https://verifiedid.did.msidentity.com/v1.0/` |
+| `VerifiedId:RequireCallbackJwtValidation` | Api     | Optional. When `true`, successful `presentation_verified` callbacks must also include a valid `receipt.id_token`. Retrieval and error callbacks still rely on the one-time callback token plus `requestId` correlation. Leave `false` unless you have verified your tenant/wallet sends the receipt JWT reliably. | `false`                                       |
 
 > **Note:** The API does not rely on a long-lived shared callback secret. It generates a one-time callback token per presentation request, sends it only to the Verified ID service through callback headers, and stores only the token hash with the session.
 
@@ -70,14 +72,16 @@ Settings for the Entra Verified ID service. **Api only.**
 
 ### Portal URLs
 
-Cross-app URLs used for CORS, redirects, and API calls.
+Cross-app URLs used for CORS, redirects, API calls, and Verified ID callback URL construction.
 
-| Setting                | Used By                   | Description                      | Example Value                                |
-| ---------------------- | ------------------------- | -------------------------------- | -------------------------------------------- |
-| `AgentPortal:BaseUrl`  | Api                       | AgentPortal origin (for CORS)    | `https://app-agentportal.azurewebsites.net`  |
-| `VerifyPortal:BaseUrl` | Api                       | VerifyPortal origin (for CORS)   | `https://app-verifyportal.azurewebsites.net` |
-| `Api:BaseUrl`          | AgentPortal, VerifyPortal | Backend API base URL             | `https://app-api.azurewebsites.net`          |
-| `Api:Scopes`           | AgentPortal               | OAuth scopes for calling the Api | `["api://<clientId>/access_as_agent"]`       |
+| Setting                | Used By                        | Description                                                                                                               | Example Value                                |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `AgentPortal:BaseUrl`  | Api                            | AgentPortal origin (for CORS)                                                                                             | `https://app-agentportal.azurewebsites.net`  |
+| `VerifyPortal:BaseUrl` | Api, AgentPortal               | VerifyPortal origin for CORS in the Api, and the caller-facing portal URL shown in AgentPortal and notification messages. | `https://app-verifyportal.azurewebsites.net` |
+| `Api:BaseUrl`          | AgentPortal, VerifyPortal, Api | Backend API base URL. The Api also uses this to build the callback URL sent to Verified ID.                               | `https://app-api.azurewebsites.net`          |
+| `Api:Scopes`           | AgentPortal                    | OAuth scopes for calling the Api. In App Service, set the first entry as `Api__Scopes__0`.                                | `["api://<clientId>/access_as_agent"]`       |
+
+> **App Service example:** If the AgentPortal calls the API with a single scope, set `Api__Scopes__0=api://<clientId>/access_as_agent`.
 
 ### Notifications
 
@@ -114,7 +118,7 @@ These values are hardcoded in `src/VerifiedIdHelpdesk.Core/Constants.cs` and req
 | `CodeCharset`                | `ABCDEFGHJKMNPQRSTUVWXYZ23456789` | Allowed characters for verification codes. Excludes visually confusable characters (0/O, 1/I/L) for phone readability. |
 | `CodeLength`                 | `8`                               | Length of generated verification codes                                                                                 |
 | `CodeExpiryMinutes`          | `10`                              | Minutes before an unused code expires                                                                                  |
-| `MaxFailedAttempts`          | `5`                               | Maximum failed code entry attempts before a session is locked                                                          |
+| `MaxFailedAttempts`          | `5`                               | Session initiation lockout threshold used by the API before a session is marked failed                                 |
 | `MaxPendingSessionsPerAgent` | `3`                               | Maximum concurrent pending verification sessions per agent                                                             |
 | `SessionPartitionKey`        | `VerificationSession`             | Azure Table Storage partition key                                                                                      |
 | `SessionTableName`           | `VerificationSessions`            | Azure Table Storage table name                                                                                         |
@@ -158,10 +162,10 @@ The Api is the most configuration-intensive app. It owns all business logic and 
 - `AzureAd:Instance`, `AzureAd:TenantId`, `AzureAd:ClientId`
 - `AzureAd:ClientCertificates:0:SourceType`, `AzureAd:ClientCertificates:0:KeyVaultUrl`, `AzureAd:ClientCertificates:0:KeyVaultCertificateName`
 - `KeyVault:Uri`
-- `VerifiedId:TenantId`, `VerifiedId:ClientId`, `VerifiedId:DidAuthority`, `VerifiedId:CredentialType`, `VerifiedId:RequestServiceBaseUrl`
+- `VerifiedId:TenantId`, `VerifiedId:ClientId`, `VerifiedId:DidAuthority`, `VerifiedId:CredentialType`, `VerifiedId:RequestServiceBaseUrl`, `VerifiedId:RequireCallbackJwtValidation`
 - `Storage:AccountUri`
 - `AuthorizationGroups:HelpDeskAgents`
-- `AgentPortal:BaseUrl`, `VerifyPortal:BaseUrl`
+- `AgentPortal:BaseUrl`, `VerifyPortal:BaseUrl`, `Api:BaseUrl`
 - `Notifications:SenderEmail`, `Notifications:SenderUserId`
 - `ApplicationInsights:ConnectionString`
 
@@ -175,6 +179,8 @@ The AgentPortal authenticates agents via Entra ID and calls the Api over HTTP.
 - `AuthorizationGroups:HelpDeskAgents`
 - `Api:BaseUrl`, `Api:Scopes`
 - `ApplicationInsights:ConnectionString`
+
+> **AgentPortal note:** Keep the global cookie minimum SameSite policy unspecified. OIDC correlation and nonce cookies need framework-managed `SameSite=None`; forcing `Lax` or `Strict` causes repeated sign-in prompts after the Entra redirect flow.
 
 ### VerifyPortal (Public)
 

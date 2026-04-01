@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > **This is a sample / demo application.** It is provided as-is, without warranty or support of any kind, by the author or Microsoft. It has not been reviewed or certified for production use. If you deploy this in a production environment, you are responsible for having the code reviewed by qualified developers and security experts, adding appropriate network controls (such as Azure Application Gateway, Web Application Firewall, and private endpoints), and ensuring it meets your organization's security, compliance, and operational requirements. Use at your own risk.
 
-A .NET 10 sample showing how a helpdesk team can verify caller identity using [Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/decentralized-identifier-overview). When an employee calls the helpdesk, an agent generates an 8-character one-time code and sends it by email or Microsoft Teams. The caller opens a public web page, enters their email and the code, then approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity — name, employee ID, department — appear in real time via SignalR, without ever asking the caller a security question.
+A .NET 10 sample showing how a helpdesk team can verify caller identity using [Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/decentralized-identifier-overview). When an employee calls the helpdesk, an agent generates an 8-character one-time code and delivers it by email, Microsoft Teams, or by reading it to the caller. The caller opens a public web page, enters their email and the code, then approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity — name, employee ID, department — appear in real time via SignalR, without ever asking the caller a security question.
 
 ## Contents
 
@@ -19,6 +19,13 @@ A .NET 10 sample showing how a helpdesk team can verify caller identity using [M
 | [Quick Start: Local Development](#quick-start-local-development) | [Customization Guide](#customization-guide)         |
 | [Quick Start: Deploy to Azure](#quick-start-deploy-to-azure)     | [Project Structure](#project-structure)             |
 | [Entra App Registration](#entra-app-registration-setup)          | [Contributing](#contributing)                       |
+
+## Documentation Map
+
+- [Configuration Reference](docs/app-settings.md) - app settings, constants, deployment parameters, and per-app configuration requirements
+- [Fork and Deploy](docs/fork-and-deploy.md) - how to fork the repo, rename resources, update branding, and deploy your own copy
+- [Secrets Rotation](docs/secrets-rotation.md) - rotate the HMAC key and Entra client certificate safely
+- [Troubleshooting](docs/troubleshooting.md) - common deployment, sign-in, callback, and notification issues
 
 ## Architecture
 
@@ -72,7 +79,7 @@ flowchart TD
 
 - **Zero-knowledge for agent** — the agent sees a verified identity claim from Authenticator, never asks for passwords or security answers
 - **One-time codes** — 8-character alphanumeric code, HMAC-SHA256 hashed at rest, expires in 10 minutes
-- **Multiple delivery channels** — email and Microsoft Teams (SMS extensible via `INotificationService`)
+- **Multiple delivery channels** — email, Microsoft Teams, and read-to-caller / verbal delivery (SMS extensible via `INotificationService`)
 - **Real-time updates** — SignalR pushes the verification result to the agent as soon as the callback arrives
 - **Group-based access control** — only members of a configured Entra security group can access the Agent Portal
 - **Large-group overage handling** — if a user belongs to >200 groups (token groups claim truncated), the app falls back to a Graph API membership check automatically
@@ -80,10 +87,24 @@ flowchart TD
 - **All secrets in Key Vault** — Managed Identity only; no credentials in code, config, or environment variables
 - **Per-request callback authentication** — every presentation request gets a one-time callback token hashed at rest and validated on callback alongside the Verified ID `requestId`
 - **Optional strict receipt JWT validation** — successful `presentation_verified` callbacks can additionally require a valid `receipt.id_token` when your tenant/wallet combination is known to supply it reliably
-- **Rate limiting** — max 5 failed code attempts per session; max 3 concurrent pending sessions per agent
+- **Rate limiting and session caps** — public endpoints are rate-limited, sessions use a lockout threshold, and each agent is limited to 3 concurrent pending verifications
 - **Idempotent callbacks** — duplicate webhook deliveries are safely ignored
 - **Session expiry background job** — marks stale sessions as `expired` every 2 minutes
 - **Full audit trail** — structured log events (`code_generated`, `verification_initiated`, `verification_completed`, `code_expired`) sent to Application Insights
+
+## Screenshots
+
+### Agent Portal: New Verification Request
+
+![Agent Portal new verification request](images/AgentPortal-1.png)
+
+### Agent Portal: Verification Pending
+
+![Agent Portal verification pending screen](images/AgentPortal-2.png)
+
+### Verify Portal: Enter Email and Code
+
+![Verify Portal email and code entry](images/Verify-IdentityPortal-1.png)
 
 ## Prerequisites
 
@@ -155,6 +176,7 @@ The quickest path is the automated PowerShell script — it creates the certific
 ```
 
 The script:
+
 - Creates an app registration and service principal
 - Creates an RSA certificate in Key Vault
 - Uploads the certificate public key to the app registration
@@ -188,14 +210,14 @@ az keyvault secret set --vault-name kv-verified-id-app-dev --name HmacKey \
 
 Point each project at your Key Vault using .NET user secrets:
 
-```
+```shell
 # Works on Windows, Mac, and Linux — run from the repo root
 dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.Api
 dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.AgentPortal
 dotnet user-secrets set "KeyVault:Uri" "https://kv-verified-id-app-dev.vault.azure.net/" --project src/VerifiedIdHelpdesk.VerifyPortal
 ```
 
-Then open `appsettings.json` (or `appsettings.Development.json`) in each project and fill in the values from your app registration and Verified ID setup. See the [Configuration Reference](#configuration-reference) table for a full list of keys.
+Then open `appsettings.json` (or `appsettings.Development.json`) in each project and fill in the values from your app registration and Verified ID setup. For the full key list and per-application breakdown, use [docs/app-settings.md](docs/app-settings.md).
 
 > **Note:** `DefaultAzureCredential` automatically picks up your `az login` session in local development. No additional environment variables are required.
 
@@ -678,6 +700,8 @@ If your agents belong to more than 200 Entra security groups, the `groups` claim
 
 ## Configuration Reference
 
+Use [docs/app-settings.md](docs/app-settings.md) for the complete settings matrix, constants, deployment parameters, and per-application breakdown. The summary below keeps the README focused on the values most teams touch first during setup and deployment.
+
 All non-secret values can be supplied in three ways — ASP.NET Core reads all of them automatically:
 
 | Environment           | How to set config                                                          |
@@ -690,34 +714,22 @@ Secrets (`HmacKey`) are always read from Key Vault via Managed Identity regardle
 
 > **App Service note:** Set each key as an Application Setting with `__` replacing `:`.
 > For example, `AzureAd:TenantId` becomes `AzureAd__TenantId`.
-> The single value you _must_ set is `KeyVault__Uri` — the app uses it to load everything else from Key Vault at startup.
+> For array settings, use numeric segments such as `Api__Scopes__0`.
 
-### Configuration keys
+### Commonly updated settings
 
-| appsettings.json key                                   | App Service / env var name                                | Description                                                                                                      |
-| ------------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `AzureAd:Instance`                                     | `AzureAd__Instance`                                       | Always `https://login.microsoftonline.com/`                                                                      |
-| `AzureAd:TenantId`                                     | `AzureAd__TenantId`                                       | Your Entra tenant ID (GUID)                                                                                      |
-| `AzureAd:ClientId`                                     | `AzureAd__ClientId`                                       | App registration client ID (GUID)                                                                                |
-| `AzureAd:CallbackPath`                                 | `AzureAd__CallbackPath`                                   | OIDC redirect path — leave as `/signin-oidc`                                                                     |
-| `AzureAd:ClientCertificates:0:SourceType`              | `AzureAd__ClientCertificates__0__SourceType`              | `KeyVault`                                                                                                       |
-| `AzureAd:ClientCertificates:0:KeyVaultUrl`             | `AzureAd__ClientCertificates__0__KeyVaultUrl`             | Full URI of your Key Vault                                                                                       |
-| `AzureAd:ClientCertificates:0:KeyVaultCertificateName` | `AzureAd__ClientCertificates__0__KeyVaultCertificateName` | Certificate name — `EntraClientCert`                                                                             |
-| `KeyVault:Uri`                                         | `KeyVault__Uri`                                           | Full URI of your Key Vault, e.g. `https://kv-my-vault.vault.azure.net/`                                          |
-| `VerifiedId:TenantId`                                  | `VerifiedId__TenantId`                                    | Entra tenant ID — same as `AzureAd:TenantId`                                                                     |
-| `VerifiedId:ClientId`                                  | `VerifiedId__ClientId`                                    | App registration client ID — same as `AzureAd:ClientId`                                                          |
-| `VerifiedId:DidAuthority`                              | `VerifiedId__DidAuthority`                                | Your DID, e.g. `did:web:yourdomain.com`                                                                          |
-| `VerifiedId:CredentialType`                            | `VerifiedId__CredentialType`                              | Verifiable credential type name, e.g. `EmployeeVerifiedCredential`                                               |
-| `VerifiedId:RequestServiceBaseUrl`                     | `VerifiedId__RequestServiceBaseUrl`                       | Always `https://verifiedid.did.msidentity.com/v1.0/`                                                             |
-| `VerifiedId:RequireCallbackJwtValidation`              | `VerifiedId__RequireCallbackJwtValidation`                | Optional. When `true`, successful `presentation_verified` callbacks must also include a valid `receipt.id_token` |
-| `Storage:AccountUri`                                   | `Storage__AccountUri`                                     | Azure Table Storage endpoint, e.g. `https://stmystorage.table.core.windows.net/`                                 |
-| `AuthorizationGroups:HelpDeskAgents`                   | `AuthorizationGroups__HelpDeskAgents`                     | Object ID of the Entra security group for helpdesk agents                                                        |
-| `AgentPortal:BaseUrl`                                  | `AgentPortal__BaseUrl`                                    | Public base URL of the Agent Portal, e.g. `https://agents.yourdomain.com`                                        |
-| `VerifyPortal:BaseUrl`                                 | `VerifyPortal__BaseUrl`                                   | Public base URL of the Verify Portal, e.g. `https://verify.yourdomain.com`                                       |
-| `Api:BaseUrl`                                          | `Api__BaseUrl`                                            | Public base URL of the Backend API, e.g. `https://api.yourdomain.com`                                            |
-| `Notifications:SenderEmail`                            | `Notifications__SenderEmail`                              | UPN of the mailbox used to send email notifications                                                              |
-| `Notifications:SenderUserId`                           | `Notifications__SenderUserId`                             | Object ID of the sender's Entra user account                                                                     |
-| `ApplicationInsights:ConnectionString`                 | `ApplicationInsights__ConnectionString`                   | App Insights connection string (non-secret)                                                                      |
+| Setting group             | Typical keys                                                                                         | Why you set them                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Key Vault**             | `KeyVault:Uri`                                                                                       | The main bootstrap setting. The apps use it to load secrets and certificate references at startup.       |
+| **Entra ID**              | `AzureAd:TenantId`, `AzureAd:ClientId`, `AzureAd:CallbackPath`                                       | Connects the Agent Portal and API to your tenant and app registration.                                   |
+| **Verified ID**           | `VerifiedId:TenantId`, `VerifiedId:ClientId`, `VerifiedId:DidAuthority`, `VerifiedId:CredentialType` | Points the API at your Entra Verified ID tenant and credential definition.                               |
+| **Portal URLs**           | `AgentPortal:BaseUrl`, `VerifyPortal:BaseUrl`, `Api:BaseUrl`                                         | Needed for CORS, redirects, portal-to-API calls, and Verified ID callback URL construction.              |
+| **Agent-to-API scopes**   | `Api:Scopes:0`                                                                                       | Required by AgentPortal when acquiring a downstream token. In App Service this becomes `Api__Scopes__0`. |
+| **Authorization**         | `AuthorizationGroups:HelpDeskAgents`                                                                 | Restricts AgentPortal access to your helpdesk security group.                                            |
+| **Notifications**         | `Notifications:SenderEmail`, `Notifications:SenderUserId`                                            | Identifies the mailbox / account used for email and Teams delivery.                                      |
+| **Telemetry and storage** | `ApplicationInsights:ConnectionString`, `Storage:AccountUri`                                         | Enables diagnostics and points the API at Azure Table Storage.                                           |
+
+> **Strict callback JWT mode:** `VerifiedId:RequireCallbackJwtValidation` is optional. Leave it `false` unless you have confirmed that successful `presentation_verified` callbacks in your tenant reliably include `receipt.id_token`.
 
 ### Key Vault secrets
 
@@ -726,7 +738,9 @@ Secrets (`HmacKey`) are always read from Key Vault via Managed Identity regardle
 | `EntraClientCert`         | Self-signed certificate created by `New-AppRegistration.ps1`. The private key is generated inside Key Vault and never exported.                                     |
 | `HmacKey`                 | 32-byte cryptographically random value, base64-encoded. PowerShell: `[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))` |
 
-### Setting App Service Application Settings
+### Example: API App Service settings
+
+The example below shows the API app. AgentPortal and VerifyPortal use different subsets of settings; use [docs/app-settings.md](docs/app-settings.md) for the per-application list.
 
 ```powershell
 # PowerShell
@@ -772,10 +786,12 @@ az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-pr
 
 ## Customization Guide
 
+For repo renaming, branding, and deployment-specific customization beyond the quick edits below, see [docs/fork-and-deploy.md](docs/fork-and-deploy.md).
+
 | What to change                           | Where                                                                                                                                                                                                  |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Color scheme**                         | Edit the `:root` block in `src/VerifiedIdHelpdesk.AgentPortal/wwwroot/css/theme.css` and the matching file in `VerifyPortal`. Every component reads from CSS variables — no other files need touching. |
-| **Organization logo**                    | Replace `wwwroot/images/logo.png` in both portals (PNG, transparent background, ~160×48 px)                                                                                                            |
+| **Organization logo**                    | Replace `wwwroot/images/logo.svg` in both portals (SVG preferred; size it to render cleanly at roughly 160×48 px)                                                                                      |
 | **Code length or expiry**                | Edit `src/VerifiedIdHelpdesk.Core/Constants.cs` — change `CodeLength` and/or `CodeExpiryMinutes`                                                                                                       |
 | **Add a delivery channel (e.g., SMS)**   | Implement `INotificationService` in `src/VerifiedIdHelpdesk.Notifications/` and register it in the API's `Program.cs`                                                                                  |
 | **Change the agent authorization group** | Update `AuthorizationGroups:HelpDeskAgents` in `appsettings.json` (or Key Vault if you prefer)                                                                                                         |
@@ -787,22 +803,24 @@ az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-pr
 
 This sample implements the following security controls. Do not relax these for a production deployment.
 
-| #   | Control                                     | Implementation                                                                                                                                                                                                                                      |
-| --- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **No plaintext codes at rest**              | Only `HMAC-SHA256(code, hmacKey)` is stored — see `CodeHasher.cs`                                                                                                                                                                                   |
-| 2   | **No plaintext codes in logs**              | Only `sessionId` is logged; the code never appears in any log event                                                                                                                                                                                 |
-| 3   | **Cryptographically random codes**          | `RandomNumberGenerator.GetBytes()` — never `System.Random` or `Guid`                                                                                                                                                                                |
-| 4   | **Callback authentication and correlation** | Each presentation request gets a one-time callback token, only its hash is stored, callbacks must match the stored `requestId`, and strict `receipt.id_token` validation is available as an opt-in for successful `presentation_verified` callbacks |
-| 5   | **Server-side expiry**                      | `ExpiresAt` (UTC) is compared to `DateTime.UtcNow` — client timestamps are ignored                                                                                                                                                                  |
-| 6   | **Invalidate on first use**                 | Session status is set to `verified` before returning the callback response                                                                                                                                                                          |
-| 7   | **Secrets from Key Vault only**             | `DefaultAzureCredential` + Key Vault config provider; no secrets in appsettings or env vars                                                                                                                                                         |
-| 8   | **HMAC key in memory only**                 | Retrieved once at startup via config provider; never written to disk or logs                                                                                                                                                                        |
-| 9   | **Rate limiting**                           | Max 5 failed code attempts per session (then `failed`); max 3 concurrent pending sessions per agent                                                                                                                                                 |
-| 10  | **HTTPS only**                              | `httpsOnly: true` on App Service + HSTS header (min 1 year)                                                                                                                                                                                         |
-| 11  | **CORS restricted**                         | Backend API allows only the two portal origins — no wildcards                                                                                                                                                                                       |
-| 12  | **Agent Portal IP-restricted**              | App Service access restriction via `corporateIpRange` Bicep parameter                                                                                                                                                                               |
-| 13  | **Generic error messages**                  | Exception details, stack traces, and internal paths are never returned to callers                                                                                                                                                                   |
-| 14  | **Idempotent webhook handling**             | Duplicate callbacks are ignored if session status is already `verified`                                                                                                                                                                             |
+| #   | Control                                     | Implementation                                                                                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **No plaintext codes at rest**              | Only `HMAC-SHA256(code, hmacKey)` is stored — see `CodeHasher.cs`                                                                                                                                                                                                                                                |
+| 2   | **No plaintext codes in logs**              | Only `sessionId` is logged; the code never appears in any log event                                                                                                                                                                                                                                              |
+| 3   | **Cryptographically random codes**          | `RandomNumberGenerator.GetBytes()` — never `System.Random` or `Guid`                                                                                                                                                                                                                                             |
+| 4   | **Callback authentication and correlation** | Each presentation request gets a one-time callback token, only its hash is stored, the callback loads the session from `state`, pending-session callbacks must match the stored `requestId`, and strict `receipt.id_token` validation is available as an opt-in for successful `presentation_verified` callbacks |
+| 5   | **Server-side expiry**                      | `ExpiresAt` (UTC) is compared to `DateTime.UtcNow` — client timestamps are ignored                                                                                                                                                                                                                               |
+| 6   | **Invalidate on first use**                 | Session status is set to `verified` before returning the callback response                                                                                                                                                                                                                                       |
+| 7   | **Secrets from Key Vault only**             | `DefaultAzureCredential` + Key Vault config provider; no secrets in appsettings or env vars                                                                                                                                                                                                                      |
+| 8   | **HMAC key in memory only**                 | Retrieved once at startup via config provider; never written to disk or logs                                                                                                                                                                                                                                     |
+| 9   | **Rate limiting and session caps**          | Public endpoints are rate-limited, each agent is limited to 3 concurrent pending sessions, and the session initiation lockout threshold is controlled by `MaxFailedAttempts`                                                                                                                                     |
+| 10  | **HTTPS only**                              | `httpsOnly: true` on App Service + HSTS header (min 1 year)                                                                                                                                                                                                                                                      |
+| 11  | **CORS restricted**                         | Backend API allows only the two portal origins — no wildcards                                                                                                                                                                                                                                                    |
+| 12  | **Agent Portal IP-restricted**              | App Service access restriction via `corporateIpRange` Bicep parameter                                                                                                                                                                                                                                            |
+| 13  | **Generic error messages**                  | Exception details, stack traces, and internal paths are never returned to callers                                                                                                                                                                                                                                |
+| 14  | **Idempotent webhook handling**             | Duplicate callbacks are ignored if session status is already `verified`                                                                                                                                                                                                                                          |
+
+> **AgentPortal auth note:** Keep `CookiePolicyOptions.MinimumSameSitePolicy = SameSiteMode.Unspecified`. OpenID Connect correlation and nonce cookies must be able to use `SameSite=None`, and forcing a global `Lax` or `Strict` minimum causes repeated sign-in prompts. Background polling endpoints should also avoid forcing interactive downstream-token challenges when the in-memory token cache is cold after an app restart.
 
 ## Project Structure
 

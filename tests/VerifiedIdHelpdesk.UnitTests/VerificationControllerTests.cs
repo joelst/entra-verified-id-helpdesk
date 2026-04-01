@@ -353,11 +353,83 @@ public class VerificationControllerTests
             Times.Once());
     }
 
+    /// <summary>
+    /// Verifies that a successful initiate request does not count as a failed
+    /// code-entry attempt. The counter is for bad guesses, not valid initiations.
+    /// </summary>
+    [Fact]
+    public async Task Initiate_DoesNotIncrementFailedAttempts_WhenCodeAndEmailAreValid()
+    {
+        var session = new VerificationSession
+        {
+            SessionId = "attempt-session-id",
+            Status = SessionStatus.Pending,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            FailedAttempts = 2
+        };
+        _sessionStore.Setup(s => s.GetByCodeHashAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(session);
+        _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>()))
+            .Returns(Task.CompletedTask);
+        _verifiedIdClient.Setup(v => v.CreatePresentationRequestAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new PresentationRequestResult
+            {
+                RequestId = "req-valid-456",
+                QrCodeUri = "data://qr",
+                DeepLink = "openid-vc://deep"
+            });
+
+        var result = await CreateController().Initiate(new InitiateRequest("caller@test.com", "ABCDEFGH"));
+
+        Assert.IsType<OkObjectResult>(result);
+        _sessionStore.Verify(s =>
+            s.UpdateAsync(It.Is<VerificationSession>(sess =>
+                sess.RequestId == "req-valid-456"
+                && sess.FailedAttempts == 2)),
+            Times.Once());
+    }
+
     // ── Initiate: brute-force protection ─────────────────────────────────────
 
     /// <summary>
-    /// Verifies that after <see cref="Constants.MaxFailedAttempts"/> failed attempts
-    /// the session is locked (status = "failed") and further attempts are rejected.
+    /// Verifies that a wrong code for a caller with a pending session increments
+    /// the failed-attempt counter even though the exact code hash does not match.
+    /// </summary>
+    [Fact]
+    public async Task Initiate_ReturnsBadRequest_AndIncrementsFailedAttempts_WhenCodeIsWrongForPendingSession()
+    {
+        var session = new VerificationSession
+        {
+            SessionId = "failed-attempt-session-id",
+            CallerEmail = "caller@test.com",
+            Status = SessionStatus.Pending,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            FailedAttempts = 1
+        };
+        _sessionStore.Setup(s => s.GetByCodeHashAsync(It.IsAny<string>(), "caller@test.com"))
+            .ReturnsAsync((VerificationSession?)null);
+        _sessionStore.Setup(s => s.GetMostRecentPendingByCallerEmailAsync("caller@test.com"))
+            .ReturnsAsync(session);
+        _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await CreateController().Initiate(new InitiateRequest("caller@test.com", "WRONG999"));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Code is invalid or has expired.", badRequest.Value);
+        _sessionStore.Verify(s =>
+            s.UpdateAsync(It.Is<VerificationSession>(sess =>
+                sess.SessionId == "failed-attempt-session-id"
+                && sess.FailedAttempts == 2
+                && sess.Status == SessionStatus.Pending)),
+            Times.Once());
+        _verifiedIdClient.Verify(v => v.CreatePresentationRequestAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+    }
+
+    /// <summary>
+    /// Verifies that the fifth wrong attempt locks the pending session immediately.
     /// This prevents brute-force guessing of the 8-character code.
     /// </summary>
     [Fact]
@@ -365,22 +437,29 @@ public class VerificationControllerTests
     {
         var session = new VerificationSession
         {
+            SessionId = "lockout-session-id",
+            CallerEmail = "caller@test.com",
             Status = SessionStatus.Pending,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
-            FailedAttempts = Constants.MaxFailedAttempts // one more increment exceeds the limit
+            FailedAttempts = Constants.MaxFailedAttempts - 1
         };
-        _sessionStore.Setup(s => s.GetByCodeHashAsync(It.IsAny<string>(), It.IsAny<string>()))
+        _sessionStore.Setup(s => s.GetByCodeHashAsync(It.IsAny<string>(), "caller@test.com"))
+            .ReturnsAsync((VerificationSession?)null);
+        _sessionStore.Setup(s => s.GetMostRecentPendingByCallerEmailAsync("caller@test.com"))
             .ReturnsAsync(session);
         _sessionStore.Setup(s => s.UpdateAsync(It.IsAny<VerificationSession>()))
             .Returns(Task.CompletedTask);
 
-        var result = await CreateController().Initiate(new InitiateRequest("caller@test.com", "ABCDEFGH"));
+        var result = await CreateController().Initiate(new InitiateRequest("caller@test.com", "WRONG999"));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Too many failed attempts.", badRequest.Value);
 
-        // Session must be locked so subsequent calls fail even with the correct code.
         _sessionStore.Verify(s =>
-            s.UpdateAsync(It.Is<VerificationSession>(sess => sess.Status == SessionStatus.Failed)),
+            s.UpdateAsync(It.Is<VerificationSession>(sess =>
+                sess.SessionId == "lockout-session-id"
+                && sess.FailedAttempts == Constants.MaxFailedAttempts
+                && sess.Status == SessionStatus.Failed)),
             Times.Once());
     }
 

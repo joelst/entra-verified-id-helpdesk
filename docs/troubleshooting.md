@@ -29,11 +29,17 @@ Check that the `repoUrl` and `repoBranch` Bicep parameters point to a valid repo
 
 ### "MsalUiRequiredException: user_null"
 
-The in-memory token cache was lost (typically after an app restart). The `[AuthorizeForScopes]` attribute handles re-authentication automatically. For production, implement a distributed token cache (Phase 4.3).
+The in-memory token cache was lost, typically after an app restart or recycle. User-initiated AgentPortal actions can trigger re-authentication through `[AuthorizeForScopes]`, but background polling endpoints should not force an interactive challenge. For production, implement a distributed token cache.
 
 ### "IDW10502: MsalUiRequiredException"
 
-Same root cause as above. The user needs to re-authenticate.
+Same root cause as above. The user needs to re-authenticate for user-initiated actions.
+
+### "AgentPortal keeps asking me to sign in again"
+
+Check the AgentPortal cookie policy. `CookiePolicyOptions.MinimumSameSitePolicy` must remain `Unspecified`.
+
+If a global minimum of `Lax` or `Strict` is forced, the OpenID Connect correlation and nonce cookies cannot use `SameSite=None`, and the Entra redirect flow will loop back to sign-in.
 
 ### "401 Unauthorized on API calls"
 
@@ -65,7 +71,9 @@ Check the API logs for one of these callback rejections:
 
 This app authenticates callbacks with a **one-time callback token** plus the stored Verified ID `requestId`.
 
-If you enabled `VerifiedId:RequireCallbackJwtValidation=true`, the API also requires a valid `receipt.id_token` on successful `presentation_verified` callbacks. Leave this setting `false` unless you have confirmed your tenant and wallet flow consistently includes that receipt JWT.
+If you enabled `VerifiedId:RequireCallbackJwtValidation=true`, the API also requires a valid `receipt.id_token` on successful `presentation_verified` callbacks. Leave this setting `false` unless you have confirmed your tenant and wallet flow consistently includes that receipt JWT. Retrieval and error callbacks still rely on the one-time callback token plus `requestId` correlation.
+
+Successful callback authentication is logged at Debug level as either `mode=token_requestid` or `mode=token_requestid_receiptjwt`. If you see callback rejections but never see one of those accepted modes, focus first on the callback token header, request correlation, and strict-JWT setting.
 
 ### "QR code not scanning"
 

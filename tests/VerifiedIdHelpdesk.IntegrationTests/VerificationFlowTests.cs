@@ -44,6 +44,17 @@ public sealed class InMemorySessionStore : ISessionStore
         return Task.FromResult(session);
     }
 
+    public Task<VerificationSession?> GetMostRecentPendingByCallerEmailAsync(string callerEmail)
+    {
+        var session = _sessions.Values
+            .Where(s => s.CallerEmail.Equals(callerEmail, StringComparison.OrdinalIgnoreCase)
+                        && s.Status == SessionStatus.Pending)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefault();
+
+        return Task.FromResult(session);
+    }
+
     public Task<VerificationSession?> GetByRequestIdAsync(string requestId)
     {
         var session = _sessions.Values.FirstOrDefault(s => s.RequestId == requestId);

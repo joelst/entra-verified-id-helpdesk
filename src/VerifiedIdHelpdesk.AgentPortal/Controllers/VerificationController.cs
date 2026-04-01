@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Web;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using VerifiedIdHelpdesk.AgentPortal.Models;
 using CoreConstants = VerifiedIdHelpdesk.Core.Constants;
 
 namespace VerifiedIdHelpdesk.AgentPortal.Controllers;
@@ -74,8 +76,14 @@ public class VerificationController : Controller
 
         // Forward the user's bearer token to the API
         var accessToken = await GetApiAccessTokenAsync();
-        if (!string.IsNullOrEmpty(accessToken))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            ViewBag.ApiBaseUrl = _config["Api:BaseUrl"] ?? string.Empty;
+            ModelState.AddModelError(string.Empty, GetTokenUnavailableMessage("create the verification request"));
+            return View(model);
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         var payload = JsonSerializer.Serialize(new
         {
@@ -94,7 +102,9 @@ public class VerificationController : Controller
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync();
-            ModelState.AddModelError(string.Empty, $"Failed to create verification: {error}");
+            _logger.LogWarning("Create verification request failed with status code {StatusCode}", (int)response.StatusCode);
+            ViewBag.ApiBaseUrl = _config["Api:BaseUrl"] ?? string.Empty;
+            ModelState.AddModelError(string.Empty, GetDownstreamApiMessage(response.StatusCode, "create the verification request", error));
             return View(model);
         }
 
@@ -130,20 +140,38 @@ public class VerificationController : Controller
             TicketId = ticketId ?? string.Empty,
             DeliveryChannel = deliveryChannel ?? "email",
             ExpiresAt = DateTime.TryParse(expiresAt, out var dt) ? dt : DateTime.UtcNow.AddMinutes(10),
-            ApiBaseUrl = _config["Api:BaseUrl"] ?? string.Empty
+            ApiBaseUrl = _config["Api:BaseUrl"] ?? string.Empty,
+            VerifyPortalUrl = _config["VerifyPortal:BaseUrl"] ?? string.Empty
         };
         return View(vm);
     }
 
     // GET /Verification/Result/{sessionId}
     [HttpGet]
+    [AuthorizeForScopes(ScopeKeySection = "Api:Scopes")]
     public async Task<IActionResult> Result(string sessionId)
     {
         var client = _httpClientFactory.CreateClient("ApiClient");
+        var accessToken = await GetApiAccessTokenAsync();
+        if (string.IsNullOrEmpty(accessToken))
+            return View("Error", CreateErrorViewModel(
+                "Unable to load verification result",
+                GetTokenUnavailableMessage("load the verification result"),
+                "/Verification/Create",
+                "Return to new verification"));
 
-        var response = await client.GetAsync($"/api/verification/public-status/{sessionId}");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.GetAsync($"/api/verification/status/{sessionId}");
         if (!response.IsSuccessStatusCode)
-            return RedirectToAction("Create");
+        {
+            _logger.LogWarning("Failed to load verification result for session {SessionId}. Status code {StatusCode}", sessionId, (int)response.StatusCode);
+            return View("Error", CreateErrorViewModel(
+                "Unable to load verification result",
+                GetDownstreamApiMessage(response.StatusCode, "load the verification result"),
+                $"/Verification/Pending?sessionId={Uri.EscapeDataString(sessionId)}",
+                "Return to pending verification"));
+        }
 
         var status = JsonSerializer.Deserialize<StatusResponse>(
             await response.Content.ReadAsStringAsync(), JsonOptions);
@@ -193,14 +221,26 @@ public class VerificationController : Controller
     {
         var client = _httpClientFactory.CreateClient("ApiClient");
         var accessToken = await GetApiAccessTokenAsync();
-        if (!string.IsNullOrEmpty(accessToken))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return View(new HistoryViewModel
+            {
+                Sessions = [],
+                ErrorMessage = GetTokenUnavailableMessage("load your verification history")
+            });
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         var response = await client.GetAsync("/api/verification/my-sessions?limit=50");
         if (!response.IsSuccessStatusCode)
         {
-            // If the API call fails (e.g. no auth), show an empty history
-            return View(new HistoryViewModel { Sessions = [] });
+            _logger.LogWarning("Failed to load verification history. Status code {StatusCode}", (int)response.StatusCode);
+            return View(new HistoryViewModel
+            {
+                Sessions = [],
+                ErrorMessage = GetDownstreamApiMessage(response.StatusCode, "load your verification history")
+            });
         }
 
         var sessions = JsonSerializer.Deserialize<List<SessionSummary>>(
@@ -208,6 +248,40 @@ public class VerificationController : Controller
 
         return View(new HistoryViewModel { Sessions = sessions });
     }
+    private static ErrorViewModel CreateErrorViewModel(string title, string message, string actionUrl, string actionText)
+    {
+        return new ErrorViewModel
+        {
+            Title = title,
+            Message = message,
+            RecoveryActionUrl = actionUrl,
+            RecoveryActionText = actionText
+        };
+    }
+
+    private static string GetTokenUnavailableMessage(string actionDescription)
+    {
+        return $"We couldn't {actionDescription} because your helpdesk session needs to be refreshed. Refresh the page and sign in again if prompted.";
+    }
+
+    private static string GetDownstreamApiMessage(HttpStatusCode statusCode, string actionDescription, string? responseBody = null)
+    {
+        if ((statusCode == HttpStatusCode.BadRequest || statusCode == HttpStatusCode.Conflict || (int)statusCode == 429)
+            && !string.IsNullOrWhiteSpace(responseBody))
+        {
+            return responseBody.Trim();
+        }
+
+        return statusCode switch
+        {
+            HttpStatusCode.Unauthorized => $"We couldn't {actionDescription} because your sign-in to the helpdesk API has expired. Refresh the page and sign in again.",
+            HttpStatusCode.Forbidden => $"We couldn't {actionDescription} because your account does not have permission for that action. Verify that you're in the Help Desk Agents group.",
+            HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout or HttpStatusCode.InternalServerError =>
+                $"We couldn't {actionDescription} because the helpdesk API is temporarily unavailable. Please try again in a moment.",
+            _ => $"We couldn't {actionDescription} right now. Please try again, and contact your IT administrator if the problem continues."
+        };
+    }
+
     private async Task<string?> GetApiAccessTokenAsync(bool interactiveChallenge = true)
     {
         var scopes = _config.GetSection("Api:Scopes").Get<string[]>();
@@ -259,6 +333,7 @@ public class PendingViewModel
     public string DeliveryChannel { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public string ApiBaseUrl { get; set; } = string.Empty;
+    public string VerifyPortalUrl { get; set; } = string.Empty;
 }
 
 public class ResultViewModel
@@ -276,6 +351,7 @@ public record StatusResponse(string Status, string? VerifiedClaims, DateTime? Ve
 public class HistoryViewModel
 {
     public List<SessionSummary> Sessions { get; set; } = [];
+    public string? ErrorMessage { get; set; }
 }
 
 public class SessionSummary

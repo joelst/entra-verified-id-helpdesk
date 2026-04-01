@@ -2,7 +2,7 @@
 
 ## What This App Does
 
-This is a .NET 8 web application that enables an organization's helpdesk to verify caller identity using Microsoft Entra Verified ID. When an employee calls the helpdesk, an agent generates an 8-character one-time code and sends it to the caller via email or Teams. The caller navigates to a public verification site, enters their email and code, and approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity in real time.
+This is a .NET 10 web application that enables an organization's helpdesk to verify caller identity using Microsoft Entra Verified ID. When an employee calls the helpdesk, an agent generates an 8-character one-time code and delivers it to the caller via email, Teams, or by reading it to the caller. The caller navigates to a public verification site, enters their email and code, and approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity in real time.
 
 There are three web apps in one solution, plus shared libraries.
 
@@ -11,11 +11,11 @@ There are three web apps in one solution, plus shared libraries.
 ## Solution Structure
 
 ```
-VerifiedIdHelpdesk.sln
+VerifiedIdHelpdesk.slnx
 ├── src/
-│   ├── VerifiedIdHelpdesk.AgentPortal/        # ASP.NET Core 8 MVC — helpdesk agent UI
-│   ├── VerifiedIdHelpdesk.VerifyPortal/        # ASP.NET Core 8 Razor Pages — public IDVerify site
-│   ├── VerifiedIdHelpdesk.Api/                 # ASP.NET Core 8 Web API — backend orchestration
+│   ├── VerifiedIdHelpdesk.AgentPortal/        # ASP.NET Core 10 MVC — helpdesk agent UI
+│   ├── VerifiedIdHelpdesk.VerifyPortal/        # ASP.NET Core 10 Razor Pages — public IDVerify site
+│   ├── VerifiedIdHelpdesk.Api/                 # ASP.NET Core 10 Web API — backend orchestration
 │   ├── VerifiedIdHelpdesk.Core/                # Domain models, interfaces, constants (no dependencies)
 │   ├── VerifiedIdHelpdesk.Infrastructure/      # Azure Table Storage, Entra Verified ID client, Graph notifications
 │   └── VerifiedIdHelpdesk.Notifications/       # Email, Teams, SMS adapters
@@ -114,11 +114,10 @@ All secrets come from Azure Key Vault via Managed Identity. No secrets in appset
 
 ### Key Vault secrets (set these manually or via Bicep)
 
-| Secret name              | Value                                           |
-|--------------------------|-------------------------------------------------|
-| `EntraClientSecret`      | App registration client secret (POC only; use cert for prod) |
-| `HmacKey`                | 32-byte base64 string for code hashing         |
-| `StorageConnectionString`| Azure Table Storage connection string           |
+| Secret name       | Value                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `HmacKey`         | 32-byte base64 string for code hashing                                               |
+| `EntraClientCert` | Client certificate stored in Key Vault and used by the apps for Entra authentication |
 
 ### Program.cs — Key Vault config provider (add to all three web apps)
 
@@ -148,10 +147,12 @@ public class VerificationSession
     public string Note { get; set; } = string.Empty;        // Max 500 chars
     public string AgentEntraId { get; set; } = string.Empty;
     public string AgentDisplayName { get; set; } = string.Empty;
-    public string DeliveryChannel { get; set; } = string.Empty; // "email" | "teams" | "sms"
+    public string DeliveryChannel { get; set; } = string.Empty; // "email" | "teams" | "verbal" | "sms"
     public string Status { get; set; } = "pending";         // pending | verified | expired | failed
+    public int FailedAttempts { get; set; }                  // Session initiation lockout counter
     public string? VerifiedClaims { get; set; }             // JSON string of returned claims
     public string? RequestId { get; set; }                  // Entra Verified ID request ID
+    public string? CallbackTokenHash { get; set; }          // SHA-256 hash of one-time callback token
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }                 // CreatedAt + 10 minutes
     public DateTime? VerifiedAt { get; set; }
@@ -166,7 +167,12 @@ public interface ISessionStore
     Task<VerificationSession> CreateAsync(VerificationSession session);
     Task<VerificationSession?> GetAsync(string sessionId);
     Task<VerificationSession?> GetByCodeHashAsync(string codeHash, string callerEmail);
+    Task<VerificationSession?> GetByRequestIdAsync(string requestId);
     Task UpdateAsync(VerificationSession session);
+    Task<int> CountPendingByAgentAsync(string agentEntraId);
+    Task<int> ExpireOldSessionsAsync();
+    Task<IReadOnlyList<VerificationSession>> GetByAgentAsync(string agentEntraId, int limit = 50);
+    Task<IReadOnlyList<VerificationSession>> GetPendingByAgentAsync(string agentEntraId);
 }
 ```
 
@@ -175,8 +181,7 @@ public interface ISessionStore
 ```csharp
 public interface IVerifiedIdClient
 {
-    Task<IssuanceRequestResult> CreateIssuanceRequestAsync(string userEmail, string idTokenHint);
-    Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl);
+    Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl, string callbackApiKey);
 }
 ```
 
@@ -260,12 +265,9 @@ Calls the Microsoft Entra Verified ID Request Service REST API.
 
 Base URL: `https://verifiedid.did.msidentity.com/v1.0/{tenantId}/verifiableCredentials/`
 
-**Issuance endpoint:** `POST /createIssuanceRequest`
-- Use ID Token Hint pattern: include the user's Entra ID token as `idTokenHint`
-- Returns a `requestId` and a URL/QR code for the Authenticator deep link
-
 **Presentation endpoint:** `POST /createPresentationRequest`
 - Include `callbackUrl` pointing to `/api/verification/callback`
+- Include a one-time callback token in the callback headers and persist only its hash with the session
 - Include `requestedCredentials` array specifying the `EmployeeVerifiedCredential` type
 - Returns a `requestId`, a QR code URL, and a deep link (`openid-vc://...`)
 
@@ -367,8 +369,9 @@ POST /api/verification/initiate
   - Look up session by codeHash + email in ISessionStore
   - Validate: session exists, status == "pending", ExpiresAt > UtcNow
   - Increment attempt count; if > MaxFailedAttempts, set status = "failed", return 400
+  - Generate a one-time callback token
   - Call IVerifiedIdClient.CreatePresentationRequestAsync()
-  - Save requestId to session
+  - Save requestId and only the callback-token hash to session
   - Log "verification_initiated" event
   - Return: { sessionId, requestId, qrCodeUri, deepLink, expiresAt }
 
@@ -386,22 +389,25 @@ POST /api/notification/send  (internal use)
 
 ```
 POST /api/verification/callback
-  [No bearer auth — validated by Entra Verified ID callback signature]
+  [No bearer auth — authenticated by a per-request callback token plus request correlation]
 
   IMPORTANT: Validate the callback before processing.
-  The callback includes an "id_token" that is a signed JWT.
-  Validate it using the Entra Verified ID public keys (published at the DID document).
-  Reject any callback that fails signature validation with HTTP 403.
+  - Use `state` to load the session
+  - Require the one-time callback token sent in the callback headers and compare it to the stored hash
+  - Require the callback `requestId` to match the stored session `RequestId`
+  - If `VerifiedId:RequireCallbackJwtValidation=true` and `requestStatus == "presentation_verified"`, also validate `receipt.id_token` against tenant signing keys
+  - Return `200 OK` for unknown or already-processed sessions (to prevent retry storms)
+  - Return `401 Unauthorized` for pending sessions when callback authentication fails
 
   On valid callback:
-  - Look up session by requestId
-  - If status != "pending", return 200 (idempotent — ignore duplicates)
-  - Set status = "verified"
+  - If `requestStatus == "presentation_verified"`, set status = "verified"
   - Set VerifiedAt = UtcNow
   - Set VerifiedClaims = JSON of claims from callback (name, employeeId, department)
   - Save session
   - Push result to SignalR group keyed by sessionId
   - Log "verification_completed" event
+  - If `requestStatus == "presentation_error"`, set status = "failed" and push a failure update
+  - If `requestStatus == "request_retrieved"`, acknowledge with 200 and wait for a later terminal callback
   - Return: HTTP 200
 ```
 
@@ -434,8 +440,19 @@ await hubContext.Clients.Group(sessionId).SendAsync("VerificationComplete", new 
 ### Program.cs
 
 ```csharp
+var apiScopes = builder.Configuration.GetSection("Api:Scopes").Get<string[]>() ?? [];
+
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"));
+  .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
+  .EnableTokenAcquisitionToCallDownstreamApi(apiScopes)
+  .AddInMemoryTokenCaches();
+
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+  options.HttpOnly = HttpOnlyPolicy.Always;
+  options.Secure = CookieSecurePolicy.Always;
+  options.MinimumSameSitePolicy = SameSiteMode.Unspecified;
+});
 
 builder.Services.AddAuthorization(options => {
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
@@ -447,6 +464,10 @@ builder.Services.AddAuthorization(options => {
 
 // All pages require authentication — agents who are not in the group see AccessDenied
 ```
+
+**Important:** Do not force a global SameSite minimum of `Lax` or `Strict` in AgentPortal. OpenID Connect correlation and nonce cookies must be able to use `SameSite=None`, and forcing a higher minimum causes repeated sign-in prompts.
+
+**Important:** User-initiated AgentPortal actions that call the API should use `[AuthorizeForScopes]`. Background polling actions should avoid forcing an interactive downstream-token challenge when the in-memory token cache is cold after an app restart.
 
 ### Group Membership Configuration
 
@@ -655,17 +676,18 @@ _logger.LogInformation("code_generated {@Event}", new {
 1. **Never store the plaintext code.** Only `HMAC-SHA256(code, hmacKey)`.
 2. **Never log the plaintext code.** Log sessionId only.
 3. **Use `RandomNumberGenerator`** for code generation — never `System.Random` or `Guid`.
-4. **Validate webhook signatures** on every callback before touching the database.
+4. **Authenticate every callback before touching the database.** Require the one-time callback token and request correlation on every pending-session callback. If strict mode is enabled, also validate `receipt.id_token` for successful `presentation_verified` callbacks before mutating state.
 5. **Validate code expiry server-side** — compare `ExpiresAt` (UTC) to `DateTime.UtcNow`. Never trust client timestamps.
 6. **Invalidate the code on first use** — set status to `"verified"` before returning the callback response.
 7. **All secrets from Key Vault via Managed Identity** — no secrets in appsettings, environment variables, or code.
 8. **HMAC key never leaves Key Vault** — retrieve once at startup via config provider; store in memory only.
-9. **Rate limit:** max 5 failed code attempts per session (then lock), max 3 concurrent pending sessions per agent.
+9. **Rate limit and cap sessions:** protect public endpoints with rate limiting, cap each agent at 3 concurrent pending sessions, and keep the session lockout threshold aligned with `MaxFailedAttempts`.
 10. **HTTPS only** — set `"HTTPS Only"` in App Service. Add HSTS header (min 1 year).
 11. **CORS restricted** — Backend API allows only Agent Portal and IDVerify origins. No wildcards.
 12. **Agent Portal restricted to corporate IP** — configure App Service access restrictions.
-13. **Generic error messages to users** — never expose exception details, stack traces, or internal paths.
-14. **Idempotent webhook handling** — check session status before updating; duplicate callbacks must not double-process.
+13. **Do not globally force `SameSite=Lax` or `SameSite=Strict` in AgentPortal.** Keep `MinimumSameSitePolicy = Unspecified` so OIDC correlation and nonce cookies can use the framework-managed SameSite behavior.
+14. **Generic error messages to users** — never expose exception details, stack traces, or internal paths.
+15. **Idempotent webhook handling** — check session status before updating; duplicate callbacks must not double-process.
 
 ---
 
@@ -673,7 +695,7 @@ _logger.LogInformation("code_generated {@Event}", new {
 
 ### Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Azure CLI (`az login` with an account that has access to the dev Key Vault)
 - Node.js (for any front-end tooling)
 - Access to your organization's Entra tenant (for local auth to work)
@@ -693,14 +715,14 @@ For the Entra Verified ID Request Service, use a **dev credential type** so test
 
 ### App registration permissions required
 
-| Permission | Type | Needed by |
-|---|---|---|
-| `User.Read.All` | Application | Backend API (directory search) |
-| `GroupMember.Read.All` | Application | Backend API (group check) |
-| `Mail.Send` | Application | Backend API (email notifications) |
-| `Chat.Create` | Application | Backend API (Teams chat) |
-| `ChatMessage.Send` | Application | Backend API (Teams message) |
-| `VerifiableCredential.Create.All` | Application | Backend API (Verified ID API) |
+| Permission                        | Type        | Needed by                         |
+| --------------------------------- | ----------- | --------------------------------- |
+| `User.Read.All`                   | Application | Backend API (directory search)    |
+| `GroupMember.Read.All`            | Application | Backend API (group check)         |
+| `Mail.Send`                       | Application | Backend API (email notifications) |
+| `Chat.Create`                     | Application | Backend API (Teams chat)          |
+| `ChatMessage.Send`                | Application | Backend API (Teams message)       |
+| `VerifiableCredential.Create.All` | Application | Backend API (Verified ID API)     |
 
 ---
 
@@ -708,15 +730,15 @@ For the Entra Verified ID Request Service, use a **dev credential type** so test
 
 Create the following. Use Managed Identity for all resource access — no stored credentials.
 
-| Resource | SKU |
-|---|---|
-| App Service Plan | B2 (P1v3 for prod) |
-| App Service — Agent Portal | — |
-| App Service — IDVerify Site | — |
-| App Service — Backend API | — |
-| Storage Account | Standard LRS |
-| Key Vault | Standard |
-| Application Insights | Pay-as-you-go |
+| Resource                    | SKU                |
+| --------------------------- | ------------------ |
+| App Service Plan            | B2 (P1v3 for prod) |
+| App Service — Agent Portal  | —                  |
+| App Service — IDVerify Site | —                  |
+| App Service — Backend API   | —                  |
+| Storage Account             | Standard LRS       |
+| Key Vault                   | Standard           |
+| Application Insights        | Pay-as-you-go      |
 
 Assign `Key Vault Secrets User` role to each App Service Managed Identity.
 Assign `Storage Table Data Contributor` role to the Backend API Managed Identity.
@@ -764,12 +786,12 @@ src/
 ├── VerifiedIdHelpdesk.AgentPortal/wwwroot/
 │   ├── css/theme.css          ← shared theme (copy or link from shared location)
 │   ├── css/site.css           ← app-specific overrides only
-│   └── images/logo.png        ← your organization logo (place your file here)
+│   └── images/logo.svg        ← your organization logo (place your file here)
 │
 ├── VerifiedIdHelpdesk.VerifyPortal/wwwroot/
 │   ├── css/theme.css          ← same file, same content
 │   ├── css/site.css
-│   └── images/logo.png
+│   └── images/logo.svg
 ```
 
 Both sites reference the logo and theme identically so they look like one product.
@@ -833,7 +855,7 @@ Define all colors as CSS variables in `theme.css`. Every component uses these va
   <!-- Top nav bar -->
   <header class="site-header">
     <div class="header-inner">
-      <img src="~/images/logo.png" alt="Your Organization" class="logo" />
+      <img src="~/images/logo.svg" alt="Your Organization" class="logo" />
       <span class="app-title">Identity Verification</span>
       <!-- Agent Portal only: show signed-in agent name -->
       @if (User.Identity?.IsAuthenticated == true)
@@ -1079,9 +1101,9 @@ To swap to your organization's brand color (e.g., `#D40000`):
 
 ### Logo
 
-Place the logo file at `wwwroot/images/logo.png` in both portals.
+Place the logo file at `wwwroot/images/logo.svg` in both portals.
 
-- Preferred format: PNG with transparent background
+- Preferred format: SVG
 - Recommended size: 160 × 48px (will render at `height: 32px` in the header)
 - If the logo is white/light (for dark backgrounds): use it as-is — the header is dark navy
 - Do not hardcode logo dimensions in CSS — the `.logo { height: 32px; width: auto; }` rule handles it
