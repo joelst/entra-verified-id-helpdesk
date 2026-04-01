@@ -442,9 +442,11 @@ public class VerificationControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
 
-        // Status and claims are present so the Result page can display them.
-        // The sessionId is a non-guessable GUID, so this is safe.
+        // Status must be present
         Assert.Contains("verified", json);
-        Assert.Contains("verifiedClaims", json);
+        // PII must NOT leak through the public endpoint
+        Assert.DoesNotContain("verifiedClaims", json);
+        Assert.DoesNotContain("Jane Doe", json);
+        Assert.DoesNotContain("EMP-999", json);
     }
 }

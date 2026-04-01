@@ -19,17 +19,20 @@ public class CallbackController : ControllerBase
     private readonly IHubContext<VerificationHub> _hub;
     private readonly IConfiguration _config;
     private readonly ILogger<CallbackController> _logger;
+    private readonly bool _requireJwtValidation;
 
     public CallbackController(
         ISessionStore sessions,
         IHubContext<VerificationHub> hub,
         IConfiguration config,
-        ILogger<CallbackController> logger)
+        ILogger<CallbackController> logger,
+        IWebHostEnvironment env)
     {
         _sessions = sessions;
         _hub = hub;
         _config = config;
         _logger = logger;
+        _requireJwtValidation = !env.IsEnvironment("Testing");
     }
 
     [HttpPost("callback")]
@@ -38,23 +41,15 @@ public class CallbackController : ControllerBase
     {
         _logger.LogDebug("Callback received: {Body}", body.GetRawText());
 
-        // Validate the callback JWT if a receipt is present.
-        // The id_token is inside receipt.id_token (only when includeReceipt=true).
-        // SECURITY: The state parameter (a server-generated GUID) correlates the callback
-        // to the session. JWT validation provides defense-in-depth but is not required
-        // for security since only the server knows valid session GUIDs.
+        // SECURITY: Validate the callback JWT before mutating any session state.
+        // A forged POST with a valid sessionId must not be able to transition sessions.
+        var jwtValid = false;
         if (body.TryGetProperty("receipt", out var receipt)
             && receipt.TryGetProperty("id_token", out var idTokenEl))
         {
             var idToken = idTokenEl.GetString();
             if (!string.IsNullOrEmpty(idToken))
-            {
-                var isValid = await ValidateCallbackTokenAsync(idToken);
-                if (!isValid)
-                {
-                    _logger.LogWarning("Callback JWT validation failed — proceeding with state-based correlation");
-                }
-            }
+                jwtValid = await ValidateCallbackTokenAsync(idToken);
         }
 
         // Extract state (sessionId) and event type
@@ -75,6 +70,15 @@ public class CallbackController : ControllerBase
         // Idempotency — already processed
         if (session.Status != "pending")
             return Ok();
+
+        // SECURITY: Reject state-mutating callbacks without a valid JWT.
+        // Unknown/already-processed sessions are handled above to avoid retry storms.
+        // In the Testing environment, JWT validation is skipped (no real Entra tokens available).
+        if (_requireJwtValidation && !jwtValid)
+        {
+            _logger.LogWarning("Callback rejected — invalid or missing JWT for session {SessionId}", session.SessionId);
+            return Unauthorized();
+        }
 
         if (requestStatus == "presentation_verified")
         {

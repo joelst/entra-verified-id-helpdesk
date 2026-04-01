@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
@@ -45,11 +46,15 @@ public class CallbackControllerTests
         mockClients.Setup(c => c.Group(It.IsAny<string>())).Returns(_groupProxy.Object);
         _hub.Setup(h => h.Clients).Returns(mockClients.Object);
 
+        var env = new Mock<IWebHostEnvironment>();
+        env.Setup(e => e.EnvironmentName).Returns("Testing");
+
         return new CallbackController(
             _sessionStore.Object,
             _hub.Object,
             config,
-            NullLogger<CallbackController>.Instance);
+            NullLogger<CallbackController>.Instance,
+            env.Object);
     }
 
     /// <summary>

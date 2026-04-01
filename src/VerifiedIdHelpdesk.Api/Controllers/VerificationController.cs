@@ -50,7 +50,9 @@ public class VerificationController : ControllerBase
         if (!string.IsNullOrEmpty(request.Note) && request.Note.Length > 500)
             return BadRequest("Note must be 500 characters or fewer.");
 
-        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
         var agentDisplayName = User.FindFirstValue("name") ?? User.Identity?.Name ?? agentEntraId;
 
         var pendingCount = await _sessions.CountPendingByAgentAsync(agentEntraId);
@@ -194,11 +196,10 @@ public class VerificationController : ControllerBase
         var session = await _sessions.GetAsync(sessionId);
         if (session == null) return NotFound();
 
-        // Return status + verified claims (sessionId is a non-guessable GUID)
+        // SECURITY: Public endpoint — return status only, never PII or verified claims.
         return Ok(new
         {
             status = session.Status,
-            verifiedClaims = session.VerifiedClaims,
             verifiedAt = session.VerifiedAt
         });
     }
@@ -229,9 +230,11 @@ public class VerificationController : ControllerBase
     [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
     public async Task<IActionResult> MySessions([FromQuery] int limit = 50)
     {
-        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
 
-        var sessions = await _sessions.GetByAgentAsync(agentEntraId, Math.Min(limit, 100));
+        var sessions = await _sessions.GetByAgentAsync(agentEntraId, Math.Clamp(limit, 1, 100));
 
         var result = sessions.Select(s => new
         {

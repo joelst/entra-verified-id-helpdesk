@@ -187,9 +187,13 @@ public class VerificationController : Controller
 
     // GET /Verification/History
     [HttpGet]
+    [AuthorizeForScopes(ScopeKeySection = "Api:Scopes")]
     public async Task<IActionResult> History()
     {
         var client = _httpClientFactory.CreateClient("ApiClient");
+        var accessToken = await GetApiAccessTokenAsync();
+        if (!string.IsNullOrEmpty(accessToken))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         var response = await client.GetAsync("/api/verification/my-sessions?limit=50");
         if (!response.IsSuccessStatusCode)
