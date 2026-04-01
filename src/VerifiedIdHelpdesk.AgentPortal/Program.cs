@@ -75,7 +75,10 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 {
     options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
     options.Secure = CookieSecurePolicy.Always;
-    options.MinimumSameSitePolicy = SameSiteMode.Lax;
+    // OpenID Connect sets correlation and nonce cookies to SameSite=None.
+    // Forcing a global minimum of Lax/Strict can break the Entra callback flow
+    // and cause repeated sign-in prompts.
+    options.MinimumSameSitePolicy = SameSiteMode.Unspecified;
 });
 
 var app = builder.Build();
