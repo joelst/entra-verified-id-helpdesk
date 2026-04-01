@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
@@ -45,16 +46,20 @@ public class GraphNotificationService : INotificationService
             ?? throw new InvalidOperationException("Notifications:SenderEmail is not configured.");
 
         var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
-            ?? "https://verify.yourdomain.com";
+            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is required for email notifications but is not configured.");
 
-        var expiryText = expiresAt.ToString("HH:mm UTC");
+        var expiryText = expiresAt.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture);
         var body = $@"
 <p>Your helpdesk agent has requested you verify your identity.</p>
+<p><strong>Verification portal:</strong> <a href='{verifyPortalUrl}'>{verifyPortalUrl}</a></p>
 <p><strong>Your one-time verification code is:</strong></p>
 <h2 style='font-family:Courier New,monospace;letter-spacing:4px;'>{displayCode}</h2>
 <p>This code expires at <strong>{expiryText}</strong>.</p>
-<p>To verify your identity, visit <a href='{verifyPortalUrl}'>{verifyPortalUrl}</a>, 
-enter your email address and the code above, then approve the request in Microsoft Authenticator.</p>
+<ol>
+  <li>Open the verification portal link above.</li>
+  <li>Enter your email address and this code.</li>
+  <li>Approve the request in Microsoft Authenticator.</li>
+</ol>
 <p><em>If you did not contact the helpdesk, please ignore this message.</em></p>";
 
         var message = new Message
@@ -78,8 +83,9 @@ enter your email address and the code above, then approve the request in Microso
         var senderUserId = _config["Notifications:SenderUserId"]
             ?? throw new InvalidOperationException("Notifications:SenderUserId is not configured.");
 
-        var verifyPortalUrl = _config["VerifyPortal:BaseUrl"] ?? "https://verify.yourdomain.com";
-        var expiryText = expiresAt.ToString("HH:mm UTC");
+        var verifyPortalUrl = _config["VerifyPortal:BaseUrl"]
+            ?? throw new InvalidOperationException("VerifyPortal:BaseUrl is required for Teams notifications.");
+        var expiryText = expiresAt.ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture);
 
         // Resolve recipient UPN → user ID
         var users = await _graph.Users.GetAsync(req =>
@@ -123,7 +129,8 @@ enter your email address and the code above, then approve the request in Microso
         });
 
         var messageText = $"Your helpdesk verification code is: **{displayCode}**\n\n" +
-                          $"It expires at {expiryText}. Visit {verifyPortalUrl} to complete verification.";
+                          $"Verification portal: {verifyPortalUrl}\n\n" +
+                          $"This code expires at {expiryText}. Open the portal, enter your email and code, then approve the request in Microsoft Authenticator.";
 
         await _graph.Chats[chat!.Id].Messages.PostAsync(new ChatMessage
         {

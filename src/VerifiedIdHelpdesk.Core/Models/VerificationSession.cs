@@ -80,6 +80,12 @@ public class VerificationSession
     public string? RequestId { get; set; }
 
     /// <summary>
+    /// SHA-256 hash of the one-time callback token sent to the Verified ID service.
+    /// SECURITY: The raw callback token is never persisted.
+    /// </summary>
+    public string? CallbackTokenHash { get; set; }
+
+    /// <summary>
     /// UTC timestamp when this session was created.
     /// </summary>
     public DateTime CreatedAt { get; set; }

@@ -20,6 +20,12 @@ public interface ISessionStore
     Task<VerificationSession?> GetByCodeHashAsync(string codeHash, string callerEmail);
 
     /// <summary>
+    /// Retrieves the most recent pending session for a caller email.
+    /// Used to record failed code-entry attempts even when the submitted code is incorrect.
+    /// </summary>
+    Task<VerificationSession?> GetMostRecentPendingByCallerEmailAsync(string callerEmail);
+
+    /// <summary>
     /// Retrieves a session by its Entra Verified ID request ID.
     /// Used to correlate webhook callbacks from the Verified ID service.
     /// </summary>
@@ -39,4 +45,16 @@ public interface ISessionStore
     /// Called by the background <c>SessionExpiryService</c> every 2 minutes.
     /// </summary>
     Task<int> ExpireOldSessionsAsync();
+
+    /// <summary>
+    /// Returns recent sessions for the given agent, ordered by creation time descending.
+    /// Used for the agent's verification history page.
+    /// </summary>
+    Task<IReadOnlyList<VerificationSession>> GetByAgentAsync(string agentEntraId, int limit = 50);
+
+    /// <summary>
+    /// Returns all currently pending sessions for the given agent.
+    /// Used for the concurrent sessions dashboard.
+    /// </summary>
+    Task<IReadOnlyList<VerificationSession>> GetPendingByAgentAsync(string agentEntraId);
 }

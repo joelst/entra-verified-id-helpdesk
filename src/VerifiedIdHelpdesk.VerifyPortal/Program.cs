@@ -21,9 +21,18 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.CookieTempDataProviderOption
 builder.Services.AddHttpClient("ApiClient", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Api:BaseUrl"]!);
-});
+}).AddStandardResilienceHandler();
 
 builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddHealthChecks();
+
+// SECURITY: Enforce secure cookie defaults
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;
+});
 
 var app = builder.Build();
 
@@ -44,13 +53,18 @@ app.Use(async (context, next) =>
         $"default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; " +
         $"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
         $"connect-src 'self' {apiBaseUrl};");
+    context.Response.Headers.Append("Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=()");
+    context.Response.Headers.Append("X-Permitted-Cross-Domain-Policies", "none");
     await next();
 });
 
 app.UseHttpsRedirection();
+app.UseCookiePolicy();
 app.UseRouting();
 app.UseAuthorization();
 app.MapStaticAssets();
 app.MapRazorPages();
+app.MapHealthChecks("/health");
 
 app.Run();

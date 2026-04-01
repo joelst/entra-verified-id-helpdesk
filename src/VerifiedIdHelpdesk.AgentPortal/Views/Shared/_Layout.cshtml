@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
     <title>@ViewData["Title"] — Identity Verification</title>
     <link rel="stylesheet" href="~/css/theme.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
@@ -10,11 +11,14 @@
 <body>
     <header class="site-header">
         <div class="header-inner">
-            <img src="~/images/logo.svg" alt="Your Organization" class="logo"
-                 onerror="this.style.display='none'" />
+            <img src="~/images/logo.svg" alt="Your Organization" class="logo" />
             <span class="app-title">Identity Verification — Agent Portal</span>
             @if (User.Identity?.IsAuthenticated == true)
             {
+                <nav class="header-nav">
+                    <a href="/Verification/Create" class="nav-link">New</a>
+                    <a href="/Verification/History" class="nav-link">History</a>
+                </nav>
                 <span class="agent-name">@(User.FindFirst("name")?.Value ?? User.Identity.Name)</span>
                 <a href="/MicrosoftIdentity/Account/SignOut" class="btn btn-sm sign-out-btn">Sign Out</a>
             }

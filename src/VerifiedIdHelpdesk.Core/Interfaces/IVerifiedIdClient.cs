@@ -14,5 +14,6 @@ public interface IVerifiedIdClient
     /// </summary>
     /// <param name="sessionId">Session ID to include in the request state (correlates the callback).</param>
     /// <param name="callbackUrl">The webhook URL where the Verified ID service will POST the result.</param>
-    Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl);
+    /// <param name="callbackApiKey">One-time callback token the Verified ID service must echo in the api-key header.</param>
+    Task<PresentationRequestResult> CreatePresentationRequestAsync(string sessionId, string callbackUrl, string callbackApiKey);
 }

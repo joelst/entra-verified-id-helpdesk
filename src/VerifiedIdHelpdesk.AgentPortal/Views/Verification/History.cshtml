@@ -1,0 +1,99 @@
+@model HistoryViewModel
+@{
+    ViewData["Title"] = "Verification History";
+}
+
+<div class="card">
+    <div class="card-title">Verification History</div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="alert alert-error" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Sessions.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">@(string.IsNullOrWhiteSpace(Model.ErrorMessage) ? "📋" : "⚠️")</div>
+            <div class="empty-state-title">@(string.IsNullOrWhiteSpace(Model.ErrorMessage) ? "No verifications yet" :
+                           "History is temporarily unavailable")</div>
+                <div class="empty-state-text">@(string.IsNullOrWhiteSpace(Model.ErrorMessage) ? "Your completed verifications will appear here." : "Try again in a moment or start a new verification request.")</div>
+                <a asp-action="Create" class="btn btn-primary" style="margin-top: 16px;">Start a Verification</a>
+            </div>
+        }
+    else
+        {
+            <div style="overflow-x:auto;">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Caller</th>
+                            <th>Ticket</th>
+                            <th>Channel</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Verified</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in Model.Sessions)
+                        {
+                            <tr>
+                                <td>
+                                    <div style="font-weight:500;">@s.CallerDisplayName</div>
+                                    <div style="font-size:var(--font-size-sm);color:var(--color-text-muted);">@s.CallerEmail</div>
+                                </td>
+                                <td>@(string.IsNullOrEmpty(s.TicketId) ? "—" : s.TicketId)</td>
+                                <td>
+                                    @switch (s.DeliveryChannel)
+                                    {
+                                        case "email":
+                                            <span>📧 Email</span>
+                                            break;
+                                        case "teams":
+
+                                            <span>💬 Teams</span>
+                                            break;
+                                        case "verbal":
+
+                                            <span>🗣️ Verbal</span>
+                                            break;
+                                        default:
+
+                                            @s.DeliveryChannel
+                                            break;
+                                    }
+                                </td>
+                                <td>
+                                    @switch (s.Status)
+                                    {
+                                        case "verified":
+                                            <span class="status-badge status-verified">✓ Verified</span>
+                                            break;
+                                        case "pending":
+                                            <span class="status-badge status-pending">⏳ Pending</span>
+                                            break;
+                                        case "expired":
+                                            <span class="status-badge status-expired">⏰ Expired</span>
+                                            break;
+                                        case "failed":
+                                            <span class="status-badge status-failed">✗ Failed</span>
+                                            break;
+                                        default:
+                                            <span>@s.Status</span>
+                                            break;
+                                    }
+                                </td>
+                                <td>@s.CreatedAt.ToString("MMM dd HH:mm")</td>
+                                <td>@(s.VerifiedAt?.ToString("MMM dd HH:mm") ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div style="margin-top: 20px;">
+            <a asp-action="Create" class="btn btn-primary">New Verification</a>
+        </div>
+    </div>

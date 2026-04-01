@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -7,6 +8,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json;
 using VerifiedIdHelpdesk.Api.Hubs;
 using VerifiedIdHelpdesk.Core.Interfaces;
+using VerifiedIdHelpdesk.Infrastructure;
 
 namespace VerifiedIdHelpdesk.Api.Controllers;
 
@@ -18,42 +20,28 @@ public class CallbackController : ControllerBase
     private readonly IHubContext<VerificationHub> _hub;
     private readonly IConfiguration _config;
     private readonly ILogger<CallbackController> _logger;
+    private readonly bool _requireJwtValidation;
 
     public CallbackController(
         ISessionStore sessions,
         IHubContext<VerificationHub> hub,
         IConfiguration config,
-        ILogger<CallbackController> logger)
+        ILogger<CallbackController> logger,
+        IWebHostEnvironment env)
     {
         _sessions = sessions;
         _hub = hub;
         _config = config;
         _logger = logger;
+        _requireJwtValidation = !env.IsEnvironment("Testing")
+            && _config.GetValue<bool>("VerifiedId:RequireCallbackJwtValidation");
     }
 
     [HttpPost("callback")]
+    [EnableRateLimiting("callback")]
     public async Task<IActionResult> Callback([FromBody] JsonElement body)
     {
         _logger.LogDebug("Callback received: {Body}", body.GetRawText());
-
-        // Validate the callback JWT if a receipt is present.
-        // The id_token is inside receipt.id_token (only when includeReceipt=true).
-        // SECURITY: The state parameter (a server-generated GUID) correlates the callback
-        // to the session. JWT validation provides defense-in-depth but is not required
-        // for security since only the server knows valid session GUIDs.
-        if (body.TryGetProperty("receipt", out var receipt)
-            && receipt.TryGetProperty("id_token", out var idTokenEl))
-        {
-            var idToken = idTokenEl.GetString();
-            if (!string.IsNullOrEmpty(idToken))
-            {
-                var isValid = await ValidateCallbackTokenAsync(idToken);
-                if (!isValid)
-                {
-                    _logger.LogWarning("Callback JWT validation failed — proceeding with state-based correlation");
-                }
-            }
-        }
 
         // Extract state (sessionId) and event type
         var requestId = body.TryGetProperty("requestId", out var rid) ? rid.GetString() : null;
@@ -73,6 +61,52 @@ public class CallbackController : ControllerBase
         // Idempotency — already processed
         if (session.Status != "pending")
             return Ok();
+
+        // SECURITY: Require the one-time callback token generated for this presentation request.
+        // The raw token is never persisted and is only shared with the Verified ID service.
+        if (!ValidateCallbackToken(session))
+        {
+            _logger.LogWarning("Callback rejected — invalid or missing callback token for session {SessionId}", session.SessionId);
+            return Unauthorized();
+        }
+
+        // SECURITY: Correlate the callback to the specific Verified ID request when available.
+        // This is a stable signal from the request API and avoids depending on the optional
+        // receipt payload whose format can vary by wallet/version.
+        if (!string.IsNullOrWhiteSpace(session.RequestId)
+            && !string.Equals(session.RequestId, requestId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Callback rejected — requestId mismatch for session {SessionId}. Expected {ExpectedRequestId}, received {ActualRequestId}",
+                session.SessionId,
+                session.RequestId,
+                requestId ?? "<missing>");
+            return Unauthorized();
+        }
+
+        var callbackAuthMode = "token_requestid";
+
+        // Optional hardening: when explicitly enabled, only require receipt JWT validation
+        // for the successful verification callback that would transition the session to
+        // "verified". Retrieval and error callbacks rely on the one-time callback token
+        // and requestId correlation because receipt payloads are optional and not format-stable.
+        if (_requireJwtValidation && RequiresStrictReceiptJwtValidation(requestStatus))
+        {
+            if (!TryGetReceiptIdToken(body, out var idToken) || !await ValidateCallbackTokenAsync(idToken))
+            {
+                _logger.LogWarning("Callback rejected — invalid or missing JWT for session {SessionId}", session.SessionId);
+                return Unauthorized();
+            }
+
+            callbackAuthMode = "token_requestid_receiptjwt";
+        }
+
+        _logger.LogDebug(
+            "Callback auth accepted: mode={CallbackAuthMode}, sessionId={SessionId}, requestStatus={RequestStatus}, requestId={RequestId}",
+            callbackAuthMode,
+            session.SessionId,
+            requestStatus ?? "<missing>",
+            requestId ?? "<missing>");
 
         if (requestStatus == "presentation_verified")
         {
@@ -116,6 +150,35 @@ public class CallbackController : ControllerBase
         return Ok();
     }
 
+    private bool ValidateCallbackToken(VerifiedIdHelpdesk.Core.Models.VerificationSession session)
+    {
+        if (!Request.Headers.TryGetValue("api-key", out var providedValues))
+            return false;
+
+        var provided = providedValues.ToString();
+        if (string.IsNullOrEmpty(provided) || string.IsNullOrEmpty(session.CallbackTokenHash))
+            return false;
+
+        return CallbackTokenProtector.Matches(provided, session.CallbackTokenHash);
+    }
+
+    private static bool TryGetReceiptIdToken(JsonElement body, out string idToken)
+    {
+        idToken = string.Empty;
+
+        if (!body.TryGetProperty("receipt", out var receipt)
+            || !receipt.TryGetProperty("id_token", out var idTokenEl))
+            return false;
+
+        idToken = idTokenEl.GetString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(idToken);
+    }
+
+    private static bool RequiresStrictReceiptJwtValidation(string? requestStatus)
+    {
+        return string.Equals(requestStatus, "presentation_verified", StringComparison.Ordinal);
+    }
+
     private static Dictionary<string, string> ExtractClaims(JsonElement body)
     {
         var claims = new Dictionary<string, string>();
@@ -141,21 +204,22 @@ public class CallbackController : ControllerBase
             var oidcConfig = await configManager.GetConfigurationAsync();
 
             var handler = new JwtSecurityTokenHandler();
-            // SECURITY NOTE: Issuer and audience validation are intentionally relaxed for
-            // Entra Verified ID callbacks, which use a service-issued JWT whose issuer/audience
-            // may not match the app registration. The signature IS validated against the tenant's
-            // signing keys, ensuring the token was issued by Microsoft Entra for this tenant.
-            //
-            // CUSTOMIZE: If you know the exact issuer URI and audience for your Verified ID
-            // callbacks, enable these checks for defense-in-depth:
-            //   ValidateIssuer = true,
-            //   ValidIssuer = "https://login.microsoftonline.com/{tenantId}/v2.0",
-            //   ValidateAudience = true,
-            //   ValidAudience = "{your-app-client-id}",
+            // SECURITY: Issuer is validated via a custom delegate because the Verified ID
+            // callback JWT may be issued from either the tenant login endpoint or the
+            // Verified ID service endpoint. Audience is validated against the app's client ID.
+            // Signature is validated against the tenant's signing keys.
             handler.ValidateToken(token, new TokenValidationParameters
             {
-                ValidateIssuer = false,
-                ValidateAudience = false,
+                ValidateIssuer = true,
+                IssuerValidator = (issuer, token, parameters) =>
+                {
+                    if (issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.OrdinalIgnoreCase) ||
+                        issuer.StartsWith("https://verifiedid.did.msidentity.com", StringComparison.OrdinalIgnoreCase))
+                        return issuer;
+                    throw new SecurityTokenInvalidIssuerException($"Invalid issuer: {issuer}");
+                },
+                ValidateAudience = true,
+                ValidAudiences = [_config["AzureAd:ClientId"]!],
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKeys = oidcConfig.SigningKeys,

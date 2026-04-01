@@ -71,6 +71,22 @@ public class AzureTableSessionStore : ISessionStore
         return null;
     }
 
+    public async Task<VerificationSession?> GetMostRecentPendingByCallerEmailAsync(string callerEmail)
+    {
+        var filter = TableClient.CreateQueryFilter(
+            $"PartitionKey eq {Constants.SessionPartitionKey} and CallerEmail eq {callerEmail} and Status eq {SessionStatus.Pending}");
+
+        VerificationSession? latest = null;
+        await foreach (var entity in _table.QueryAsync<TableEntity>(filter: filter))
+        {
+            var session = FromEntity(entity);
+            if (latest == null || session.CreatedAt > latest.CreatedAt)
+                latest = session;
+        }
+
+        return latest;
+    }
+
     public async Task UpdateAsync(VerificationSession session)
     {
         var entity = ToEntity(session);
@@ -113,6 +129,34 @@ public class AzureTableSessionStore : ISessionStore
         return expiredSessions.Count;
     }
 
+    public async Task<IReadOnlyList<VerificationSession>> GetByAgentAsync(string agentEntraId, int limit = 50)
+    {
+        var filter = TableClient.CreateQueryFilter(
+            $"PartitionKey eq {Constants.SessionPartitionKey} and AgentEntraId eq {agentEntraId}");
+
+        var sessions = new List<VerificationSession>();
+        await foreach (var entity in _table.QueryAsync<TableEntity>(filter: filter))
+            sessions.Add(FromEntity(entity));
+
+        // Table Storage doesn't support ORDER BY — sort in memory
+        return sessions
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(limit)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<VerificationSession>> GetPendingByAgentAsync(string agentEntraId)
+    {
+        var filter = TableClient.CreateQueryFilter(
+            $"PartitionKey eq {Constants.SessionPartitionKey} and AgentEntraId eq {agentEntraId} and Status eq {"pending"}");
+
+        var sessions = new List<VerificationSession>();
+        await foreach (var entity in _table.QueryAsync<TableEntity>(filter: filter))
+            sessions.Add(FromEntity(entity));
+
+        return sessions.OrderByDescending(s => s.CreatedAt).ToList();
+    }
+
     private static TableEntity ToEntity(VerificationSession s) => new(Constants.SessionPartitionKey, s.SessionId)
     {
         ["CodeHash"] = s.CodeHash,
@@ -127,6 +171,7 @@ public class AzureTableSessionStore : ISessionStore
         ["Status"] = s.Status,
         ["VerifiedClaims"] = s.VerifiedClaims,
         ["RequestId"] = s.RequestId,
+        ["CallbackTokenHash"] = s.CallbackTokenHash,
         ["FailedAttempts"] = s.FailedAttempts,
         ["CreatedAt"] = s.CreatedAt,
         ["ExpiresAt"] = s.ExpiresAt,
@@ -148,6 +193,7 @@ public class AzureTableSessionStore : ISessionStore
         Status = e.GetString("Status") ?? "pending",
         VerifiedClaims = e.GetString("VerifiedClaims"),
         RequestId = e.GetString("RequestId"),
+        CallbackTokenHash = e.GetString("CallbackTokenHash"),
         FailedAttempts = e.GetInt32("FailedAttempts") ?? 0,
         CreatedAt = e.GetDateTime("CreatedAt") ?? DateTime.UtcNow,
         ExpiresAt = e.GetDateTime("ExpiresAt") ?? DateTime.UtcNow,

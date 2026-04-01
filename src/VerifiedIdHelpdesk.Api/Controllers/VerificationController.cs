@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 using System.Text.Json;
@@ -49,7 +50,9 @@ public class VerificationController : ControllerBase
         if (!string.IsNullOrEmpty(request.Note) && request.Note.Length > 500)
             return BadRequest("Note must be 500 characters or fewer.");
 
-        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
         var agentDisplayName = User.FindFirstValue("name") ?? User.Identity?.Name ?? agentEntraId;
 
         var pendingCount = await _sessions.CountPendingByAgentAsync(agentEntraId);
@@ -75,7 +78,7 @@ public class VerificationController : ControllerBase
             DeliveryChannel = request.DeliveryChannel.ToLowerInvariant(),
             Status = "pending",
             CreatedAt = now,
-            ExpiresAt = now.AddMinutes(Constants.CodeExpiryMinutes)
+            ExpiresAt = now.AddMinutes(Math.Clamp(_config.GetValue("VerifiedId:CodeExpiryMinutes", Constants.CodeExpiryMinutes), 1, 60))
         };
 
         await _sessions.CreateAsync(session);
@@ -111,12 +114,14 @@ public class VerificationController : ControllerBase
     }
 
     [HttpPost("initiate")]
+    [EnableRateLimiting("initiate")]
     public async Task<IActionResult> Initiate([FromBody] InitiateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
             return BadRequest("Email and code are required.");
 
         // Normalize
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var normalizedCode = request.Code.Replace("-", "").Replace(" ", "").ToUpperInvariant();
         if (normalizedCode.Length != Constants.CodeLength)
             return BadRequest("Invalid code format.");
@@ -124,25 +129,28 @@ public class VerificationController : ControllerBase
         var hmacKey = _config["HmacKey"]!;
         var codeHash = CodeHasher.Hash(normalizedCode, hmacKey);
 
-        var session = await _sessions.GetByCodeHashAsync(codeHash, request.Email.Trim().ToLowerInvariant());
-        if (session == null || session.Status != "pending" || session.ExpiresAt <= DateTime.UtcNow)
+        var session = await _sessions.GetByCodeHashAsync(codeHash, normalizedEmail);
+        if (session == null)
+            return await RecordFailedAttemptAndRejectAsync(normalizedEmail);
+
+        if (session.Status != SessionStatus.Pending || session.ExpiresAt <= DateTime.UtcNow)
             return BadRequest("Code is invalid or has expired.");
 
-        session.FailedAttempts++;
-        if (session.FailedAttempts > Constants.MaxFailedAttempts)
+        if (session.FailedAttempts >= Constants.MaxFailedAttempts)
         {
-            session.Status = "failed";
+            session.Status = SessionStatus.Failed;
             await _sessions.UpdateAsync(session);
             return BadRequest("Too many failed attempts.");
         }
 
         var apiBaseUrl = _config["Api:BaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
         var callbackUrl = $"{apiBaseUrl}/api/verification/callback";
+        var callbackToken = CallbackTokenProtector.Generate();
 
         PresentationRequestResult result;
         try
         {
-            result = await _verifiedId.CreatePresentationRequestAsync(session.SessionId, callbackUrl);
+            result = await _verifiedId.CreatePresentationRequestAsync(session.SessionId, callbackUrl, callbackToken);
         }
         catch (Exception ex)
         {
@@ -151,6 +159,7 @@ public class VerificationController : ControllerBase
         }
 
         session.RequestId = result.RequestId;
+        session.CallbackTokenHash = CallbackTokenProtector.Hash(callbackToken);
         await _sessions.UpdateAsync(session);
 
         _logger.LogInformation("verification_initiated {@Event}", new
@@ -186,13 +195,83 @@ public class VerificationController : ControllerBase
     }
 
     [HttpGet("public-status/{sessionId}")]
+    [EnableRateLimiting("public-status")]
     public async Task<IActionResult> PublicStatus(string sessionId)
     {
         var session = await _sessions.GetAsync(sessionId);
         if (session == null) return NotFound();
 
-        // Return only status — no claims, no PII (sessionId is a non-guessable GUID)
-        return Ok(new { status = session.Status });
+        // SECURITY: Public endpoint — return status only, never PII or verified claims.
+        return Ok(new
+        {
+            status = session.Status,
+            verifiedAt = session.VerifiedAt
+        });
+    }
+
+    /// <summary>Returns all pending sessions for the authenticated agent.</summary>
+    [HttpGet("pending-sessions")]
+    [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
+    public async Task<IActionResult> PendingSessions()
+    {
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
+
+        var sessions = await _sessions.GetPendingByAgentAsync(agentEntraId);
+        return Ok(sessions.Select(s => new
+        {
+            s.SessionId,
+            s.CallerDisplayName,
+            s.CallerEmail,
+            s.TicketId,
+            s.DeliveryChannel,
+            s.ExpiresAt,
+            s.CreatedAt
+        }));
+    }
+
+    [HttpGet("my-sessions")]
+    [Authorize(Policy = Constants.HelpDeskAgentPolicy)]
+    public async Task<IActionResult> MySessions([FromQuery] int limit = 50)
+    {
+        var agentEntraId = User.FindFirstValue("oid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(agentEntraId))
+            return Unauthorized();
+
+        var sessions = await _sessions.GetByAgentAsync(agentEntraId, Math.Clamp(limit, 1, 100));
+
+        var result = sessions.Select(s => new
+        {
+            sessionId = s.SessionId,
+            callerDisplayName = s.CallerDisplayName,
+            callerEmail = s.CallerEmail,
+            ticketId = s.TicketId,
+            deliveryChannel = s.DeliveryChannel,
+            status = s.Status,
+            createdAt = s.CreatedAt,
+            verifiedAt = s.VerifiedAt
+        });
+
+        return Ok(result);
+    }
+
+    private async Task<IActionResult> RecordFailedAttemptAndRejectAsync(string normalizedEmail)
+    {
+        var pendingSession = await _sessions.GetMostRecentPendingByCallerEmailAsync(normalizedEmail);
+        if (pendingSession == null || pendingSession.Status != SessionStatus.Pending || pendingSession.ExpiresAt <= DateTime.UtcNow)
+            return BadRequest("Code is invalid or has expired.");
+
+        pendingSession.FailedAttempts++;
+        if (pendingSession.FailedAttempts >= Constants.MaxFailedAttempts)
+        {
+            pendingSession.Status = SessionStatus.Failed;
+            await _sessions.UpdateAsync(pendingSession);
+            return BadRequest("Too many failed attempts.");
+        }
+
+        await _sessions.UpdateAsync(pendingSession);
+        return BadRequest("Code is invalid or has expired.");
     }
 
     private static string MaskEmail(string email)
