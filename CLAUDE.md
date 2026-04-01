@@ -2,7 +2,7 @@
 
 ## What This App Does
 
-This is a .NET 10 web application that enables an organization's helpdesk to verify caller identity using Microsoft Entra Verified ID. When an employee calls the helpdesk, an agent generates an 8-character one-time code and delivers it to the caller via email, Teams, or by reading it to the caller. The caller navigates to a public verification site, enters their email and code, and approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity in real time.
+This is a .NET 10 web application that enables an organization's helpdesk to verify caller identity using Microsoft Entra Verified ID. When an employee calls the helpdesk, an agent generates an 8-character one-time code and delivers it to the caller via email or by reading it to the caller. Teams delivery is temporarily disabled and currently falls back to email if requested. The caller navigates to a public verification site, enters their email and code, and approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity in real time.
 
 There are three web apps in one solution, plus shared libraries.
 
@@ -18,7 +18,7 @@ VerifiedIdHelpdesk.slnx
 │   ├── VerifiedIdHelpdesk.Api/                 # ASP.NET Core 10 Web API — backend orchestration
 │   ├── VerifiedIdHelpdesk.Core/                # Domain models, interfaces, constants (no dependencies)
 │   ├── VerifiedIdHelpdesk.Infrastructure/      # Azure Table Storage, Entra Verified ID client, Graph notifications
-│   └── VerifiedIdHelpdesk.Notifications/       # Email, Teams, SMS adapters
+│   └── VerifiedIdHelpdesk.Notifications/       # Email notifications plus optional Teams/SMS adapters
 ├── tests/
 │   ├── VerifiedIdHelpdesk.UnitTests/
 │   └── VerifiedIdHelpdesk.IntegrationTests/
@@ -36,7 +36,7 @@ VerifiedIdHelpdesk.slnx
 - **ASP.NET Core 10 Razor Pages** — IDVerify site (public, no auth)
 - **ASP.NET Core 10 Web API** — Backend API
 - **Microsoft.Identity.Web** — Entra ID OIDC authentication
-- **Microsoft.Graph** — directory search, email, Teams notifications
+- **Microsoft.Graph** — directory search, email, and optional Teams notifications
 - **Azure.Data.Tables** — session store
 - **Azure.Security.KeyVault.Secrets** — secrets at runtime
 - **Azure.Extensions.AspNetCore.Configuration.Secrets** — Key Vault as config provider
@@ -91,7 +91,7 @@ All secrets come from Azure Key Vault via Managed Identity. No secrets in appset
     "TenantId": "<your-tenant-id>",
     "ClientId": "<app-registration-client-id>",
     "DidAuthority": "did:web:<your-did-domain>",
-    "CredentialType": "EmployeeVerifiedCredential",
+    "CredentialType": "VerifiedEmployee",
     "RequestServiceBaseUrl": "https://verifiedid.did.msidentity.com/v1.0/"
   },
   "Storage": {
@@ -268,7 +268,7 @@ Base URL: `https://verifiedid.did.msidentity.com/v1.0/{tenantId}/verifiableCrede
 **Presentation endpoint:** `POST /createPresentationRequest`
 - Include `callbackUrl` pointing to `/api/verification/callback`
 - Include a one-time callback token in the callback headers and persist only its hash with the session
-- Include `requestedCredentials` array specifying the `EmployeeVerifiedCredential` type
+- Include `requestedCredentials` array specifying the `VerifiedEmployee` type
 - Returns a `requestId`, a QR code URL, and a deep link (`openid-vc://...`)
 
 Authentication: use `DefaultAzureCredential` to acquire a token for scope `3db474b9-6a0c-4840-96ac-1fceb342124f/.default` (Verifiable Credentials service).
@@ -553,7 +553,7 @@ GET  /AccessDenied → Shown to authenticated users not in the HelpDesk group
 - Entra directory search: AJAX call to `/api/directory/search?q={query}` as the agent types — returns name, email, department from Microsoft Graph. Agent selects a result; the form stores `callerEntraId` and `callerEmail` as hidden fields.
 - Ticket ID: plain text input, no validation
 - Note: textarea, max 500 chars, optional
-- Delivery channel: radio buttons — Email / Teams / SMS (SMS disabled with "(coming soon)" label)
+- Delivery channel: radio buttons — Email / Read to Caller / SMS, with Teams temporarily disabled and SMS still marked "(coming soon)"
 - Submit button: "Send Verification Request"
 
 **Pending screen** (`/Verification/Pending/{sessionId}`):
@@ -1126,7 +1126,7 @@ If no logo file is provided, hide the element gracefully:
 6. **Infrastructure — EntraVerifiedIdClient** — needs Verified ID tenant configured
 7. **Backend API — /api/verification/initiate + /api/verification/callback** — full flow
 8. **Agent Portal — Create form + Pending screen with SignalR** — end-to-end visible
-9. **GraphNotificationService** — email and Teams delivery
+9. **GraphNotificationService** — email delivery, with the Teams path still present but temporarily disabled
 10. **Session expiry background service**
 11. **Tests**
 12. **Bicep infra**

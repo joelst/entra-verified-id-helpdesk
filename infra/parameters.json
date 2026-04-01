@@ -18,7 +18,7 @@
       "value": "203.0.113.0/24"
     },
     "credentialType": {
-      "value": "EmployeeVerifiedCredential"
+      "value": "VerifiedEmployee"
     },
     "didAuthority": {
       "value": "did:web:yourdomain.com"
@@ -28,6 +28,9 @@
     },
     "senderUserId": {
       "value": "<sender-user-object-id>"
+    },
+    "keyVaultName": {
+      "value": ""
     }
   }
 }

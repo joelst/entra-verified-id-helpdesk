@@ -30,7 +30,8 @@
             <label class="form-label">Caller Name or Email</label>
             <input type="text" id="callerSearch" class="form-control"
                    placeholder="Start typing a name or email address..." autocomplete="off" />
-            <div id="searchResults" class="search-results" style="display:none;" aria-live="polite" role="listbox"></div>
+            <div id="searchResults" class="search-results" style="display:none;" aria-live="polite" role="listbox">
+            </div>
             <div id="selectedCaller" class="alert alert-info" style="display:none;margin-top:8px;"></div>
             <div id="manualEntry" style="display:none;margin-top:8px;">
                 <small style="color:var(--color-text-muted);">Enter the caller's email manually:</small>
@@ -57,9 +58,9 @@
                     <input type="radio" asp-for="DeliveryChannel" value="email" checked />
                     <span>📧 Email</span>
                 </label>
-                <label class="channel-option">
-                    <input type="radio" asp-for="DeliveryChannel" value="teams" />
-                    <span>💬 Microsoft Teams</span>
+                <label class="channel-option channel-disabled" title="Teams temporarily disabled">
+                    <input type="radio" asp-for="DeliveryChannel" value="teams" disabled />
+                    <span>💬 Microsoft Teams <small>(temporarily disabled)</small></span>
                 </label>
                 <label class="channel-option">
                     <input type="radio" asp-for="DeliveryChannel" value="verbal" />

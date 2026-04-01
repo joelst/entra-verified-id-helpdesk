@@ -51,7 +51,7 @@
     },
     "credentialType": {
       "type": "string",
-      "defaultValue": "EmployeeVerifiedCredential",
+      "defaultValue": "VerifiedEmployee",
       "metadata": {
         "description": "Verifiable credential type name defined in your Entra Verified ID tenant."
       }
@@ -60,6 +60,13 @@
       "type": "string",
       "metadata": {
         "description": "DID authority for your Verified ID tenant, e.g. \"did:web:yourdomain.com\"."
+      }
+    },
+    "verifiedIdEnrollmentUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional public URL where callers can create or obtain your organization's Verified ID before starting verification."
       }
     },
     "senderEmail": {
@@ -117,6 +124,14 @@
         "description": "Custom storage account name.Leave empty to auto-generate from the suffix (e.g. suffix \"helpdesk-dev\" → \"sthelpdesdev\"). Storage account names must be globally unique, 3–24 lowercase letters and digits only — no hyphens."
       }
     },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "maxLength": 24,
+      "metadata": {
+        "description": "Custom Key Vault name. Leave empty to auto-generate from the suffix (for example, \"kv-helpdesk-dev\"). Key Vault names must be globally unique, 3–24 characters, use lowercase letters, numbers, and hyphens, start with a letter, and end with a letter or number."
+      }
+    },
     "repoUrl": {
       "type": "string",
       "defaultValue": "https://github.com/joelst/entra-verified-id-helpdesk",
@@ -138,7 +153,7 @@
     "agentsName": "[format('app-agents-{0}', parameters('suffix'))]",
     "verifyName": "[format('app-verify-{0}', parameters('suffix'))]",
     "storageName": "[if(empty(parameters('storageAccountName')), format('st{0}', replace(parameters('suffix'), '-', '')), parameters('storageAccountName'))]",
-    "kvName": "[format('kv-{0}', parameters('suffix'))]",
+    "kvName": "[if(empty(parameters('keyVaultName')), format('kv-{0}', parameters('suffix')), parameters('keyVaultName'))]",
     "appiName": "[format('appi-{0}', parameters('suffix'))]",
     "logName": "[format('log-{0}', parameters('suffix'))]",
     "apiBaseUrl": "[format('https://{0}.azurewebsites.net', variables('apiName'))]",
@@ -473,6 +488,10 @@
             {
               "name": "Api__BaseUrl",
               "value": "[variables('apiBaseUrl')]"
+            },
+            {
+              "name": "VerifiedId__EnrollmentUrl",
+              "value": "[parameters('verifiedIdEnrollmentUrl')]"
             },
             {
               "name": "PROJECT",

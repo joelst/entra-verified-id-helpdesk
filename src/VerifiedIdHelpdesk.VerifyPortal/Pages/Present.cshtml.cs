@@ -12,6 +12,7 @@ public class PresentModel : PageModel
     public string DeepLink { get; private set; } = string.Empty;
     public DateTime ExpiresAt { get; private set; } = DateTime.UtcNow.AddMinutes(10);
     public string ApiBaseUrl { get; private set; } = string.Empty;
+    public string EnrollmentUrl { get; private set; } = string.Empty;
 
     public PresentModel(IConfiguration config) => _config = config;
 
@@ -25,6 +26,7 @@ public class PresentModel : PageModel
         ApiBaseUrl = TempData["ApiBaseUrl"] as string
                    ?? _config["Api:BaseUrl"]
                    ?? string.Empty;
+        EnrollmentUrl = _config["VerifiedId:EnrollmentUrl"] ?? string.Empty;
 
         var expiresStr = TempData["ExpiresAt"] as string;
         if (expiresStr != null && DateTime.TryParse(expiresStr, out var dt))

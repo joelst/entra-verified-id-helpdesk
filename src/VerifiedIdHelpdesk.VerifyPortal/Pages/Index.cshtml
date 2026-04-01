@@ -2,12 +2,23 @@
 @model IndexModel
 @{
     ViewData["Title"] = "Verify Your Identity";
+    var enrollmentUrl = Model.EnrollmentUrl;
 }
 
 <div class="card">
     <div class="card-title">Verify Your Identity</div>
 
     <p>Your helpdesk agent has given you a verification code. Enter your work email and the code below.</p>
+
+    @if (!string.IsNullOrWhiteSpace(enrollmentUrl))
+    {
+        <div class="alert alert-info">
+            <p>Need to create or install your organization's Verified ID in Microsoft Authenticator first?</p>
+            <p>
+                <a href="@enrollmentUrl" target="_blank" rel="noopener noreferrer">Create your Verified ID</a>
+            </p>
+        </div>
+    }
 
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
@@ -17,15 +28,13 @@
     <form method="post">
         <div class="form-group">
             <label class="form-label" for="email">Work Email Address</label>
-            <input type="email" id="email" name="email" class="form-control"
-                   placeholder="you@yourcompany.com" required autocomplete="email"
-                   value="@Model.Email" />
+            <input type="email" id="email" name="email" class="form-control" placeholder="you@yourcompany.com" required
+                   autocomplete="email" value="@Model.Email" />
         </div>
 
         <div class="form-group">
             <label class="form-label" for="code">Verification Code</label>
-            <input type="text" id="code" name="code" class="form-control"
-                   placeholder="XXXX-XXXX" required maxlength="9"
+            <input type="text" id="code" name="code" class="form-control" placeholder="XXXX-XXXX" required maxlength="9"
                    autocomplete="off" inputmode="text"
                    style="font-family: monospace; font-size: 1.3em; letter-spacing: 0.1em;" />
             <small style="color: var(--color-text-muted); margin-top: 4px; display: block;">

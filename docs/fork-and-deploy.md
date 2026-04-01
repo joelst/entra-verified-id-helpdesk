@@ -75,7 +75,7 @@ param repoBranch string = 'main'
 
 ### Notification Templates
 - Email HTML template: `src/VerifiedIdHelpdesk.Notifications/GraphNotificationService.cs` in `SendEmailAsync`
-- Teams message: Same file, `SendTeamsMessageAsync`
+- Teams message path: same file, `SendTeamsMessageAsync` (currently left in the codebase but temporarily disabled in the UI and routed to email)
 - The caller-facing portal address comes from `VerifyPortal:BaseUrl`; keep that app setting correct in both the **Api** and **AgentPortal** so verbal instructions, copy buttons, and notifications all point to your branded portal.
 
 ### Code Format

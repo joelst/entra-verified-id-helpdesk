@@ -1,3 +1,6 @@
+extern alias ApiApp;
+
+using ApiProgram = ApiApp::Program;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -116,7 +119,7 @@ public sealed class InMemorySessionStore : ISessionStore
 /// in-memory configuration so the test server starts without any Azure
 /// credentials or network connectivity.
 /// </summary>
-public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
+public sealed class TestWebApplicationFactory : WebApplicationFactory<ApiProgram>
 {
     /// <summary>Exposed so tests can pre-seed sessions or assert state.</summary>
     public readonly InMemorySessionStore Sessions = new();

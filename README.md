@@ -8,7 +8,7 @@
 > [!IMPORTANT]
 > **This is a sample / demo application.** It is provided as-is, without warranty or support of any kind, by the author or Microsoft. It has not been reviewed or certified for production use. If you deploy this in a production environment, you are responsible for having the code reviewed by qualified developers and security experts, adding appropriate network controls (such as Azure Application Gateway, Web Application Firewall, and private endpoints), and ensuring it meets your organization's security, compliance, and operational requirements. Use at your own risk.
 
-A .NET 10 sample showing how a helpdesk team can verify caller identity using [Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/decentralized-identifier-overview). When an employee calls the helpdesk, an agent generates an 8-character one-time code and delivers it by email, Microsoft Teams, or by reading it to the caller. The caller opens a public web page, enters their email and the code, then approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity — name, employee ID, department — appear in real time via SignalR, without ever asking the caller a security question.
+A .NET 10 sample showing how a helpdesk team can verify caller identity using [Microsoft Entra Verified ID](https://learn.microsoft.com/en-us/entra/verified-id/decentralized-identifier-overview). When an employee calls the helpdesk, an agent generates an 8-character one-time code and delivers it by email or by reading it to the caller. Microsoft Teams delivery is temporarily disabled and currently falls back to email if an older client still requests it. The caller opens a public web page, enters their email and the code, then approves a credential presentation in Microsoft Authenticator. The agent sees the verified identity — name, employee ID, department — appear in real time via SignalR, without ever asking the caller a security question.
 
 ## Contents
 
@@ -54,12 +54,12 @@ flowchart TD
 
     subgraph Entra["Microsoft Entra / Microsoft 365"]
         VID["Entra Verified ID\nRequest Service"]
-        GR["Microsoft Graph\n(email / Teams / directory)"]
+        GR["Microsoft Graph\n(email / directory)"]
     end
 
     AP -->|"1 · generate code + send notification"| API
     API -->|"HMAC hash stored, code sent via"| GR
-    GR -->|"email or Teams DM"| Caller
+    GR -->|"email notification"| Caller
 
     VP -->|"2 · submit email + code"| API
     API -->|"3 · create presentation request"| VID
@@ -79,7 +79,7 @@ flowchart TD
 
 - **Zero-knowledge for agent** — the agent sees a verified identity claim from Authenticator, never asks for passwords or security answers
 - **One-time codes** — 8-character alphanumeric code, HMAC-SHA256 hashed at rest, expires in 10 minutes
-- **Multiple delivery channels** — email, Microsoft Teams, and read-to-caller / verbal delivery (SMS extensible via `INotificationService`)
+- **Delivery options** — email and read-to-caller / verbal delivery are enabled. Microsoft Teams is temporarily disabled and currently falls back to email if requested by an older client (SMS remains extensible via `INotificationService`)
 - **Real-time updates** — SignalR pushes the verification result to the agent as soon as the callback arrives
 - **Group-based access control** — only members of a configured Entra security group can access the Agent Portal
 - **Large-group overage handling** — if a user belongs to >200 groups (token groups claim truncated), the app falls back to a Graph API membership check automatically
@@ -278,7 +278,7 @@ The script prints your **Tenant ID** and **Application (client) ID** — copy th
 
 1. Click the **Deploy to Azure** badge at the top of this page (or <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjoelst%2Fentra-verified-id-helpdesk%2Fmain%2Finfra%2FcreateUiDefinition.json" target="_blank" rel="noopener noreferrer">use this direct link</a>)
 
-2. **Basics tab** — select your subscription, resource group, and region. Enter the same suffix you used in step 1 (e.g. `helpdesk-prod`). The Key Vault will be named `kv-<suffix>`.
+2. **Basics tab** — select your subscription, resource group, and region. Enter the same suffix you used in step 1 (e.g. `helpdesk-prod`). By default the Key Vault is named `kv-<suffix>`, but you can now override that on the **Infrastructure** tab if the generated name is already taken.
 
 3. **Infrastructure tab** — choose the App Service plan SKU, storage redundancy, and the IP range that may reach the Agent Portal (your corporate egress IP). Defaults are suitable for dev/test.
 
@@ -289,7 +289,7 @@ The script prints your **Tenant ID** and **Application (client) ID** — copy th
 
 5. **Verified ID tab** — enter your credential type name and DID authority (from your Entra Verified ID setup).
 
-6. **Notifications tab** — enter the sender email address and Graph Object ID of the user account that sends Teams/email notifications.
+6. **Notifications tab** — enter the sender email address for verification messages. The Graph Object ID is only needed if you later re-enable the Teams delivery path.
 
 7. Click **Review + create**, then **Create** and wait for the deployment to complete.
 
@@ -726,7 +726,7 @@ Secrets (`HmacKey`) are always read from Key Vault via Managed Identity regardle
 | **Portal URLs**           | `AgentPortal:BaseUrl`, `VerifyPortal:BaseUrl`, `Api:BaseUrl`                                         | Needed for CORS, redirects, portal-to-API calls, and Verified ID callback URL construction.              |
 | **Agent-to-API scopes**   | `Api:Scopes:0`                                                                                       | Required by AgentPortal when acquiring a downstream token. In App Service this becomes `Api__Scopes__0`. |
 | **Authorization**         | `AuthorizationGroups:HelpDeskAgents`                                                                 | Restricts AgentPortal access to your helpdesk security group.                                            |
-| **Notifications**         | `Notifications:SenderEmail`, `Notifications:SenderUserId`                                            | Identifies the mailbox / account used for email and Teams delivery.                                      |
+| **Notifications**         | `Notifications:SenderEmail`, `Notifications:SenderUserId`                                            | Identifies the mailbox used for email delivery; `SenderUserId` is only needed if Teams is re-enabled.    |
 | **Telemetry and storage** | `ApplicationInsights:ConnectionString`, `Storage:AccountUri`                                         | Enables diagnostics and points the API at Azure Table Storage.                                           |
 
 > **Strict callback JWT mode:** `VerifiedId:RequireCallbackJwtValidation` is optional. Leave it `false` unless you have confirmed that successful `presentation_verified` callbacks in your tenant reliably include `receipt.id_token`.
@@ -753,7 +753,7 @@ az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-pr
   VerifiedId__TenantId="<tenant-id>" `
   VerifiedId__ClientId="<client-id>" `
   VerifiedId__DidAuthority="did:web:yourdomain.com" `
-  VerifiedId__CredentialType="EmployeeVerifiedCredential" `
+  VerifiedId__CredentialType="VerifiedEmployee" `
   Storage__AccountUri="https://stmystorage.table.core.windows.net/" `
   AuthorizationGroups__HelpDeskAgents="<group-object-id>" `
   AgentPortal__BaseUrl="https://agents.yourdomain.com" `
@@ -774,7 +774,7 @@ az webapp config appsettings set --resource-group $RG --name app-api-helpdesk-pr
   VerifiedId__TenantId="<tenant-id>" \
   VerifiedId__ClientId="<client-id>" \
   VerifiedId__DidAuthority="did:web:yourdomain.com" \
-  VerifiedId__CredentialType="EmployeeVerifiedCredential" \
+  VerifiedId__CredentialType="VerifiedEmployee" \
   Storage__AccountUri="https://stmystorage.table.core.windows.net/" \
   AuthorizationGroups__HelpDeskAgents="<group-object-id>" \
   AgentPortal__BaseUrl="https://agents.yourdomain.com" \
@@ -831,7 +831,7 @@ This sample implements the following security controls. Do not relax these for a
 │   ├── VerifiedIdHelpdesk.Api/             # ASP.NET Core 10 Web API — backend orchestration
 │   ├── VerifiedIdHelpdesk.Core/            # Domain models, interfaces, constants
 │   ├── VerifiedIdHelpdesk.Infrastructure/  # Table Storage, Entra Verified ID client, code hashing
-│   └── VerifiedIdHelpdesk.Notifications/   # Email and Teams notification adapters
+│   └── VerifiedIdHelpdesk.Notifications/   # Email notifications plus optional Teams/SMS adapters
 ├── tests/
 │   ├── VerifiedIdHelpdesk.UnitTests/       # xUnit unit tests
 │   └── VerifiedIdHelpdesk.IntegrationTests/
@@ -845,7 +845,7 @@ This sample implements the following security controls. Do not relax these for a
 - [Verifiable Credentials .NET samples](https://github.com/Azure-Samples/active-directory-verifiable-credentials-dotnet) — the upstream samples this project builds on
 - [Microsoft Identity Web](https://github.com/AzureAD/microsoft-identity-web) — auth library used by Agent Portal and API
 - [Group-based authorization in ASP.NET Core](https://github.com/Azure-Samples/active-directory-aspnetcore-webapp-openidconnect-v2/tree/master/5-WebApp-AuthZ) — pattern used for helpdesk agent access control
-- [Microsoft Graph SDK for .NET](https://github.com/microsoftgraph/msgraph-sdk-dotnet) — directory search, email, Teams
+- [Microsoft Graph SDK for .NET](https://github.com/microsoftgraph/msgraph-sdk-dotnet) — directory search, email, and optional Teams support
 
 ## Contributing
 
