@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Identity.Web.GraphServiceClient" Version="4.16.0" />
-    <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
+    <PackageReference Include="Microsoft.Graph" Version="6.8.0" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
