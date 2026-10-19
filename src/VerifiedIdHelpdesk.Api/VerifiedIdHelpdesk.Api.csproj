@@ -11,7 +11,7 @@
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="3.1.2" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" NoWarn="NU1510" />
-    <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
+    <PackageReference Include="Microsoft.Graph" Version="6.8.0" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.16.0" />
     <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
