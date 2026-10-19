@@ -22,9 +22,9 @@
       },
       "Azure.Security.KeyVault.Certificates": {
         "type": "Direct",
-        "requested": "[4.9.1, )",
-        "resolved": "4.9.1",
-        "contentHash": "WOnOJuJlchi708rjedYYXI1CBbNBfUjzqHDa6777EiCnKLhiWTnxfvCMHSjT3THDZFRaby4CRMrOPsIvaeSIoQ==",
+        "requested": "[4.9.2, )",
+        "resolved": "4.9.2",
+        "contentHash": "zPH6TSnC4ThLeVcQghm+pwgV/PEgao5D2dVG93p5TVXXHqqVen4NvGLA+WfySMieRlb+HZCQvRHk/eYg1kmqdw==",
         "dependencies": {
           "Azure.Core": "1.57.0"
         }
